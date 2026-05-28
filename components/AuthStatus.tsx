@@ -1,9 +1,28 @@
 "use client";
 
-import { useAuth } from "@/lib/useAuth";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 
 export default function AuthStatus() {
+  const router = useRouter();
   const { auth, loading, logout } = useAuth();
+  const [isAuthFlowActive, setIsAuthFlowActive] = useState(false);
+
+  const handleConnect = useCallback(() => {
+    setIsAuthFlowActive(true);
+    router.push("/api/auth/deriv");
+  }, [router]);
+
+  useEffect(() => {
+    if (isAuthFlowActive) {
+      const checkAuth = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const { loading: newLoading } = useAuth();
+        if (!newLoading) setIsAuthFlowActive(false);
+      };
+      checkAuth();
+    }
+  }, [isAuthFlowActive]);
 
   if (loading) {
     return (
@@ -17,9 +36,11 @@ export default function AuthStatus() {
   if (!auth.authenticated) {
     return (
       <a
-        href="/api/auth/deriv"
-        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border 
-          hover:border-terminal-glow/50 transition-colors text-xs"
+        href="#"
+        onClick={handleConnect}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border 
+          hover:border-terminal-glow/50 transition-colors text-xs
+          ${isAuthFlowActive ? "pointer-events-none opacity-60" : ""}`}
       >
         <span className="w-2 h-2 rounded-full bg-terminal-danger" />
         <span className="text-terminal-muted">Not Connected</span>
@@ -36,7 +57,7 @@ export default function AuthStatus() {
           {auth.accountId}
         </span>
         <span className="text-[10px] text-terminal-muted">
-          ${parseFloat(auth.balance).toFixed(2)}
+          $${parseFloat(auth.balance).toFixed(2)}
         </span>
       </div>
       <button
