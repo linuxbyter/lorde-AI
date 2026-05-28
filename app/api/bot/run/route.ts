@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   if (!botCode) {
     return NextResponse.json(
-      { error: "No bot file loaded. Please load a trade bot first." },
+      { error: "No bot file loaded. Please load a trade file first." },
       { status: 400 }
     );
   }
@@ -21,7 +22,6 @@ export async function POST(request: NextRequest) {
   const engineUrl = process.env.NEXT_PUBLIC_BOT_ENGINE_URL;
 
   if (!engineUrl) {
-    // No external engine configured — run in local simulation mode
     return NextResponse.json({
       status: "started",
       mode: "local",
@@ -34,7 +34,11 @@ export async function POST(request: NextRequest) {
   try {
     const engineResponse = await fetch(engineUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+        "Deriv-App-ID": process.env.NEXT_PUBLIC_DERIV_APP_ID!,
+      },
       body: JSON.stringify({
         token,
         account_id: accountId,
@@ -53,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const data = await engineResponse.json();
     return NextResponse.json({ status: "started", ...data });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       {
         error: "Failed to reach bot engine. Running in local simulation mode.",

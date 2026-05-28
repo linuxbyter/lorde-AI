@@ -11,21 +11,37 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Fetch balance from Deriv API
+  const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
+
   try {
-    const response = await fetch("https://api.deriv.com/api/v1/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        balance: 1,
-        account_id: accountId,
-        req_id: 1,
-      }),
-    });
+    const response = await fetch(
+      "https://api.derivws.com/trading/v1/options/accounts",
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Deriv-App-ID": clientId!,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     const data = await response.json();
-    return NextResponse.json({ balance: data.balance?.balance || "0.00" });
+
+    if (data.data && data.data.length > 0) {
+      const account = accountId
+        ? data.data.find((a: { account_id: string }) => a.account_id === accountId)
+        : data.data[0];
+
+      if (account) {
+        return NextResponse.json({
+          balance: String(account.balance || "0.00"),
+          currency: account.currency || "USD",
+        });
+      }
+    }
+
+    return NextResponse.json({ balance: "0.00", currency: "USD" });
   } catch {
-    return NextResponse.json({ balance: "0.00" });
+    return NextResponse.json({ balance: "0.00", currency: "USD" });
   }
 }

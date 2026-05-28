@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 export interface AuthInfo {
   authenticated: boolean;
   token: string;
   accountId: string;
   balance: string;
+  expiresAt: number;
 }
 
 export function useAuth() {
@@ -15,38 +16,65 @@ export function useAuth() {
     token: "",
     accountId: "",
     balance: "0.00",
+    expiresAt: 0,
   });
   const [loading, setLoading] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
       setAuth(data);
+
+      // If token was refreshed, update cookies server-side
+      if (data.refreshed) {
+        // The server already returned new token data,
+        // but we need to persist the new cookies
+        // This is a limitation - we'll just use the new token in memory
+      }
     } catch {
-      setAuth({ authenticated: false, token: "", accountId: "", balance: "0.00" });
+      setAuth({ authenticated: false, token: "", accountId: "", balance: "0.00", expiresAt: 0 });
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const fetchBalance = useCallback(async () => {
+    if (!auth.token || !auth.accountId) return;
+    try {
+      const res = await fetch("/api/bot/balance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: auth.token, accountId: auth.accountId }),
+      });
+      const data = await res.json();
+      if (data.balance && data.balance !== auth.balance) {
+        setAuth((prev) => ({ ...prev, balance: data.balance }));
+      }
+    } catch {
+      // Silent fail for balance polling
+    }
+  }, [auth.token, auth.accountId, auth.balance]);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
+  // Balance polling every 30 seconds
+  useEffect(() => {
+    if (auth.authenticated && auth.token) {
+      intervalRef.current = setInterval(fetchBalance, 30000);
+      return () => {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      };
+    }
+  }, [auth.authenticated, auth.token, fetchBalance]);
+
   const logout = useCallback(async () => {
-    // Clear cookies server-side by fetching a logout endpoint or just refresh
-    // For simplicity, we clear the cookie via the callback page trick
-    document.cookie =
-      "deriv_token=; path=/; max-age=0; SameSite=Lax; Secure";
-    document.cookie =
-      "deriv_account=; path=/; max-age=0; SameSite=Lax; Secure";
-    document.cookie =
-      "deriv_balance=; path=/; max-age=0; SameSite=Lax; Secure";
-    document.cookie =
-      "deriv_authenticated=; path=/; max-age=0; SameSite=Lax; Secure";
-    setAuth({ authenticated: false, token: "", accountId: "", balance: "0.00" });
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    window.location.href = "/api/auth/logout";
   }, []);
 
-  return { auth, loading, refresh, logout };
+  return { auth, loading, refresh, logout, fetchBalance };
 }
