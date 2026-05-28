@@ -9,12 +9,6 @@ export interface AuthInfo {
   balance: string;
 }
 
-function readCookie(name: string): string {
-  if (typeof document === "undefined") return "";
-  const match = document.cookie.match(new RegExp(`${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : "";
-}
-
 export function useAuth() {
   const [auth, setAuth] = useState<AuthInfo>({
     authenticated: false,
@@ -24,32 +18,35 @@ export function useAuth() {
   });
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(() => {
-    const authenticated = readCookie("deriv_authenticated") === "true";
-    setAuth({
-      authenticated,
-      token: readCookie("deriv_token"),
-      accountId: readCookie("deriv_account"),
-      balance: readCookie("deriv_balance") || "0.00",
-    });
-    setLoading(false);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json();
+      setAuth(data);
+    } catch {
+      setAuth({ authenticated: false, token: "", accountId: "", balance: "0.00" });
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Clear cookies server-side by fetching a logout endpoint or just refresh
+    // For simplicity, we clear the cookie via the callback page trick
     document.cookie =
-      "deriv_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      "deriv_token=; path=/; max-age=0; SameSite=Lax; Secure";
     document.cookie =
-      "deriv_account=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      "deriv_account=; path=/; max-age=0; SameSite=Lax; Secure";
     document.cookie =
-      "deriv_balance=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      "deriv_balance=; path=/; max-age=0; SameSite=Lax; Secure";
     document.cookie =
-      "deriv_authenticated=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    refresh();
-  }, [refresh]);
+      "deriv_authenticated=; path=/; max-age=0; SameSite=Lax; Secure";
+    setAuth({ authenticated: false, token: "", accountId: "", balance: "0.00" });
+  }, []);
 
   return { auth, loading, refresh, logout };
 }
