@@ -73,18 +73,18 @@ export default function LandingPage() {
         </button>
 
         {/* Footer info */}
-        <div className="mt-16 flex items-center gap-6 text-xs text-terminal-muted">
-          <span className="flex items-center gap-2">
+        <div className="mt-12 sm:mt-16 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-[10px] sm:text-xs text-terminal-muted">
+          <span className="flex items-center gap-1.5 sm:gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow" />
             Deriv OAuth
           </span>
-          <span className="w-px h-3 bg-terminal-border" />
-          <span className="flex items-center gap-2">
+          <span className="w-px h-3 bg-terminal-border hidden sm:block" />
+          <span className="flex items-center gap-1.5 sm:gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-terminal-accent" />
             Bot Engine
           </span>
-          <span className="w-px h-3 bg-terminal-border" />
-          <span className="flex items-center gap-2">
+          <span className="w-px h-3 bg-terminal-border hidden sm:block" />
+          <span className="flex items-center gap-1.5 sm:gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow" />
             Real-time Logs
           </span>

@@ -34,34 +34,34 @@ export default function LoadBotButton() {
   );
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 sm:gap-3">
       <input
         ref={inputRef}
         type="file"
-        accept=".js,.ts,.py,.json,.bot"
+        accept=".js,.ts,.json,.bot"
         onChange={handleChange}
         className="hidden"
       />
       <button
         onClick={() => inputRef.current?.click()}
-        className="flex items-center gap-2 px-4 py-2 rounded-md border border-terminal-border bg-terminal-surface
-          hover:border-terminal-glow/50 hover:bg-terminal-surface/80 transition-all text-sm"
+        className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md border border-terminal-border bg-terminal-surface
+          hover:border-terminal-glow/50 hover:bg-terminal-surface/80 transition-all text-xs sm:text-sm"
       >
-        <svg className="w-4 h-4 text-terminal-glow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-terminal-glow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
         </svg>
         <span>Load Bot</span>
       </button>
       {bot && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow" />
-          <span className="text-terminal-muted font-mono">{bot.name}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow shrink-0" />
+          <span className="text-terminal-muted font-mono truncate max-w-[100px] sm:max-w-none">{bot.name}</span>
           <button
             onClick={() => {
               setBot(null);
               addLog("info", "Bot unloaded");
             }}
-            className="text-terminal-muted hover:text-terminal-danger transition-colors"
+            className="text-terminal-muted hover:text-terminal-danger transition-colors shrink-0"
           >
             ✕
           </button>
