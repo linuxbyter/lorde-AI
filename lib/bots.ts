@@ -18,7 +18,7 @@ export const BOTS: BotDefinition[] = [
     strategy: "Bollinger Bands + RSI",
     difficulty: "Intermediate",
     riskLevel: "Medium",
-    symbol: "1HZ100V",
+    symbol: "R_100",
     features: [
       "Bollinger Bands + RSI confluence",
       "3-ladder entry system ($10/$15/$20)",
@@ -33,7 +33,7 @@ module.exports = async function runBot(token, accountId, appId) {
   console.log("[3P BOT] Account: " + accountId);
 
   var CONFIG = {
-    symbol: "1HZ100V",
+    symbol: "R_100",
     baseBet: 10,
     ladder: [10, 15, 20],
     duration: 60,
