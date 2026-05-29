@@ -17,19 +17,30 @@ export interface BotFile {
 export interface LogEntry {
   id: string;
   timestamp: string;
-  type: "info" | "success" | "warning" | "error" | "trade";
+  type: "info" | "success" | "warning" | "error" | "trade" | "signal";
   message: string;
+}
+
+export interface TradeStats {
+  totalPnL: number;
+  winCount: number;
+  lossCount: number;
+  closedCount: number;
+  openCount: number;
+  winRate: number;
 }
 
 export interface BotState {
   bot: BotFile | null;
   isRunning: boolean;
   logs: LogEntry[];
+  stats: TradeStats;
   setBot: (bot: BotFile | null) => void;
   startBot: () => void;
   stopBot: () => void;
   addLog: (type: LogEntry["type"], message: string) => void;
   clearLogs: () => void;
+  updateStats: (partial: Partial<TradeStats> | ((prev: TradeStats) => Partial<TradeStats>)) => void;
 }
 
 const BotStateContext = createContext<BotState | null>(null);
@@ -38,6 +49,14 @@ export function BotStateProvider({ children }: { children: ReactNode }) {
   const [bot, setBotState] = useState<BotFile | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [stats, setStats] = useState<TradeStats>({
+    totalPnL: 0,
+    winCount: 0,
+    lossCount: 0,
+    closedCount: 0,
+    openCount: 0,
+    winRate: 0,
+  });
 
   const setBot = useCallback((newBot: BotFile | null) => {
     setBotState(newBot);
@@ -54,16 +73,27 @@ export function BotStateProvider({ children }: { children: ReactNode }) {
         type,
         message,
       };
-      setLogs((prev) => [...prev.slice(-200), entry]);
+      setLogs((prev) => [...prev.slice(-500), entry]);
     },
     []
   );
 
   const clearLogs = useCallback(() => setLogs([]), []);
 
+  const updateStats = useCallback((partial: Partial<TradeStats> | ((prev: TradeStats) => Partial<TradeStats>)) => {
+    setStats((prev) => {
+      const updates = typeof partial === "function" ? partial(prev) : partial;
+      const next = { ...prev, ...updates };
+      next.winRate = next.closedCount > 0
+        ? Math.round((next.winCount / next.closedCount) * 100)
+        : 0;
+      return next;
+    });
+  }, []);
+
   return (
     <BotStateContext.Provider
-      value={{ bot, isRunning, logs, setBot, startBot, stopBot, addLog, clearLogs }}
+      value={{ bot, isRunning, logs, stats, setBot, startBot, stopBot, addLog, clearLogs, updateStats }}
     >
       {children}
     </BotStateContext.Provider>

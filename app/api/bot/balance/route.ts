@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
+  const token = request.cookies.get("deriv_token")?.value;
+
+  if (!token) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   let body: any;
   try {
     body = await request.json();
@@ -8,11 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { token, accountId } = body;
-
-  if (!token) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-  }
+  const { accountId } = body;
 
   const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
 

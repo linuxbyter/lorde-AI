@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/authContext";
 
 export default function AuthStatus() {
@@ -53,7 +54,7 @@ export default function AuthStatus() {
   if (!auth.selectedAccount) {
     return (
       <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
-        <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow" />
+        <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow shrink-0" />
         <span className="text-[10px] sm:text-xs font-mono text-terminal-glow">Loading...</span>
       </div>
     );
@@ -98,64 +99,82 @@ export default function AuthStatus() {
         </button>
       </div>
 
-      {/* Account Selector Modal */}
-      {showAccountModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-full animate-slide-up shadow-2xl mx-auto">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-terminal-glow/20 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-terminal-glow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3" />
-                </svg>
-              </div>
-              <div>
+      {/* Account Selector Modal — rendered as portal-like with document.body */}
+      {showAccountModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowAccountModal(false);
+            }}
+          >
+            <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-[calc(100%-2rem)] animate-slide-up shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-xs sm:text-sm">Select Trading Account</h3>
-                <p className="text-[10px] sm:text-xs text-terminal-muted">
-                  Choose demo or real account
-                </p>
-              </div>
-            </div>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {auth.accounts.map((acc) => (
-                <div
-                  key={acc.accountId}
-                  className={`flex items-center gap-3 py-2.5 px-3 rounded-lg border cursor-pointer transition-colors ${
-                    acc.accountId === selected.accountId
-                      ? "border-terminal-glow bg-terminal-glow/10"
-                      : "border-terminal-border hover:bg-terminal-surface/80"
-                  }`}
-                  onClick={() => handleSelectAccount(acc.accountId)}
+                <button
+                  onClick={() => setShowAccountModal(false)}
+                  className="text-terminal-muted hover:text-terminal-danger transition-colors"
                 >
-                  <div className={`w-3 h-3 rounded-full border-2 shrink-0 ${
-                    acc.accountId === selected.accountId
-                      ? "border-terminal-glow bg-terminal-glow"
-                      : "border-terminal-muted"
-                  }`} />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[10px] sm:text-xs font-mono text-terminal-glow truncate">{acc.accountId}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[9px] sm:text-[10px] ${acc.type === "demo" ? "text-terminal-glow" : acc.type === "real" ? "text-terminal-accent" : "text-terminal-muted"}`}>
-                        ${(parseFloat(acc.balance) || 0).toFixed(2)} {acc.currency}
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {auth.accounts.map((acc) => (
+                  <div
+                    key={acc.accountId}
+                    className={`flex items-center gap-3 py-2.5 px-3 rounded-lg border cursor-pointer transition-colors ${
+                      acc.accountId === selected.accountId
+                        ? "border-terminal-glow bg-terminal-glow/10"
+                        : "border-terminal-border hover:bg-terminal-surface/80"
+                    }`}
+                    onClick={() => handleSelectAccount(acc.accountId)}
+                  >
+                    <div
+                      className={`w-3 h-3 rounded-full border-2 shrink-0 ${
+                        acc.accountId === selected.accountId
+                          ? "border-terminal-glow bg-terminal-glow"
+                          : "border-terminal-muted"
+                      }`}
+                    />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[10px] sm:text-xs font-mono text-terminal-glow truncate">
+                        {acc.accountId}
                       </span>
-                      <span className="text-[8px] sm:text-[10px] text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-surface/20 uppercase">
-                        {acc.type}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-[9px] sm:text-[10px] ${
+                            acc.type === "demo"
+                              ? "text-terminal-glow"
+                              : acc.type === "real"
+                              ? "text-terminal-accent"
+                              : "text-terminal-muted"
+                          }`}
+                        >
+                          ${(parseFloat(acc.balance) || 0).toFixed(2)} {acc.currency}
+                        </span>
+                        <span className="text-[8px] sm:text-[10px] text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-surface/20 uppercase">
+                          {acc.type}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowAccountModal(false)}
+                  className="px-4 py-2 rounded-md border border-terminal-border text-xs sm:text-sm text-terminal-muted hover:bg-terminal-surface/80 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowAccountModal(false)}
-                className="px-4 py-2 rounded-md border border-terminal-border text-xs sm:text-sm text-terminal-muted hover:bg-terminal-surface/80 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </>
   );
 }
+

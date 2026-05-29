@@ -91,7 +91,7 @@ module.exports = async function runBot(token, accountId, appId) {
 
   function evaluateAndTrade(currentPrice, ws, requestId, pendingRequests) {
     var now = Date.now();
-    if (state.lastSignalTime && now - state.lastSignalTime < 5000) return;
+    if (state.lastSignalTime && now - state.lastSignalTime < 15000) return;
     if (state.openTrades.length >= CONFIG.maxOpenTrades) return;
     if (state.tradesThisHour >= CONFIG.maxTradesPerHour) return;
 
@@ -137,9 +137,10 @@ module.exports = async function runBot(token, accountId, appId) {
         duration: CONFIG.duration,
         duration_unit: CONFIG.durationUnit,
         underlying_symbol: CONFIG.symbol,
+        subscribe: 1,
         req_id: reqId,
       };
-      console.log("[3P BOT] Sending proposal:", JSON.stringify(proposalPayload));
+      console.log("[3P BOT] Proposal: " + signal + " $" + stake + " | ID:" + reqId);
       ws.send(JSON.stringify(proposalPayload));
       pendingRequests[reqId] = { type: "proposal", time: Date.now() };
       state.tradesThisHour++;
@@ -224,11 +225,10 @@ module.exports = async function runBot(token, accountId, appId) {
 
       ws.on("message", function(data) {
         try {
-          var raw = data.toString();
-          var parsed = JSON.parse(raw);
-          // Log everything except ticks for debugging
-          if (!parsed.tick) {
-            console.log("[3P BOT] WS MSG:", raw.substring(0, 500));
+          var parsed = JSON.parse(data.toString());
+          // Log non-tick messages for debugging (proposal responses, errors, etc)
+          if (!parsed.tick && parsed.msg_type !== "balance") {
+            console.log("[3P BOT] WS:", parsed.msg_type || "unknown", JSON.stringify(parsed).substring(0, 400));
           }
           handleMessage(parsed, ws, requestId, pendingRequests);
         } catch (err) { console.error("[3P BOT] Parse error:", err.message); }

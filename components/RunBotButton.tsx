@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/authContext";
 import { useState, useRef, useCallback } from "react";
 
 export default function RunBotButton() {
-  const { bot, isRunning, startBot, stopBot, addLog } = useBotState();
+  const { bot, isRunning, startBot, stopBot, addLog, updateStats } = useBotState();
   const { auth } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -94,7 +94,32 @@ export default function RunBotButton() {
                               data.type === "warn" ? "warning" :
                               data.type === "success" ? "success" :
                               "info";
-              addLog(msgType as "info" | "success" | "warning" | "error" | "trade", data.message);
+
+              // Parse trade results from bot logs to update stats
+              const msg = data.message || "";
+              if (msg.includes("WIN") || msg.includes("won")) {
+                const pnlMatch = msg.match(/P&L: \$([-\d.]+)/);
+                const pnl = pnlMatch ? parseFloat(pnlMatch[1]) : 0;
+                updateStats((prev) => ({ totalPnL: prev.totalPnL + pnl, winCount: prev.winCount + 1, closedCount: prev.closedCount + 1 }));
+                addLog("trade", msg);
+              } else if (msg.includes("LOSS") || msg.includes("lost")) {
+                const pnlMatch = msg.match(/P&L: \$([-\d.]+)/);
+                const pnl = pnlMatch ? parseFloat(pnlMatch[1]) : 0;
+                updateStats((prev) => ({ totalPnL: prev.totalPnL + pnl, lossCount: prev.lossCount + 1, closedCount: prev.closedCount + 1 }));
+                addLog("trade", msg);
+              } else if (msg.includes("SIGNAL:")) {
+                addLog("signal", msg);
+              } else if (msg.includes("Contract bought")) {
+                updateStats((prev) => ({ openCount: prev.openCount + 1 }));
+                addLog("trade", msg);
+              } else if (msg.includes("Contract closed")) {
+                updateStats((prev) => ({ openCount: Math.max(0, prev.openCount - 1) }));
+                addLog("trade", msg);
+              } else if (msg.includes("Session P&L")) {
+                addLog("trade", msg);
+              } else {
+                addLog(msgType as "info" | "success" | "warning" | "error" | "trade", msg);
+              }
             } catch {}
           }
         }
@@ -112,7 +137,7 @@ export default function RunBotButton() {
         abortRef.current = null;
       }
     }
-  }, [auth, bot, isRunning, startBot, stopBot, addLog]);
+  }, [auth, bot, isRunning, startBot, stopBot, addLog, updateStats]);
 
   return (
     <>
