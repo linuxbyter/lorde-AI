@@ -42,13 +42,26 @@ export async function GET(request: NextRequest) {
 
     if (accountsRes.ok) {
       const accountsData = await accountsRes.json();
-      if (accountsData.data && Array.isArray(accountsData.data)) {
-        accounts = (accountsData.data as DerivAccount[]).map((acc: DerivAccount) => ({
-          accountId: acc.account_id,
-          balance: String(acc.balance || "0.00"),
-          currency: acc.currency || "USD",
-          type: acc.account_type || "unknown",
-        }));
+      if (accountsData.data) {
+        let accountsArray: DerivAccount[] = [];
+        if (Array.isArray(accountsData.data)) {
+          accountsArray = accountsData.data as DerivAccount[];
+        } else if (typeof accountsData.data === 'object' && accountsData.data !== null) {
+          // Handle object format like { demo: {...}, real: {...} }
+          const obj = accountsData.data as Record<string, any>;
+          accountsArray = Object.entries(obj).map(([type, acc]) => ({
+            ...(acc as DerivAccount),
+            account_type: type
+          } as DerivAccount));
+        }
+        if (accountsArray.length > 0) {
+          accounts = accountsArray.map((acc: DerivAccount) => ({
+            accountId: acc.account_id,
+            balance: String(acc.balance || "0.00"),
+            currency: acc.currency || "USD",
+            type: acc.account_type || "unknown",
+          }));
+        }
       }
     } else {
       console.error("[Auth/me] Deriv accounts API returned:", accountsRes.status);
