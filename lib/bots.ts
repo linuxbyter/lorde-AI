@@ -223,16 +223,23 @@ module.exports = async function runBot(token, accountId, appId) {
       });
 
       ws.on("message", function(data) {
-        try { handleMessage(JSON.parse(data), ws, requestId, pendingRequests); }
-        catch (err) { console.error("[3P BOT] Parse error:", err.message); }
+        try {
+          var raw = data.toString();
+          var parsed = JSON.parse(raw);
+          // Log everything except ticks for debugging
+          if (!parsed.tick) {
+            console.log("[3P BOT] WS MSG:", raw.substring(0, 500));
+          }
+          handleMessage(parsed, ws, requestId, pendingRequests);
+        } catch (err) { console.error("[3P BOT] Parse error:", err.message); }
       });
 
       ws.on("error", function(err) {
         console.error("[3P BOT] WebSocket error:", err.message);
       });
 
-      ws.on("close", function() {
-        console.log("[3P BOT] WebSocket closed, reconnecting in " + (CONFIG.reconnectDelay / 1000) + "s...");
+      ws.on("close", function(code, reason) {
+        console.log("[3P BOT] WebSocket closed - code: " + code + " reason: " + (reason ? reason.toString() : "none"));
         state.isConnected = false;
         setTimeout(connectLoop, CONFIG.reconnectDelay);
       });
