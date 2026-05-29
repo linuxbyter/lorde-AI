@@ -2,12 +2,13 @@
 
 import { useBotState } from "@/lib/botStore";
 import { useAuth } from "@/lib/authContext";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 export default function RunBotButton() {
   const { bot, isRunning, startBot, stopBot, addLog } = useBotState();
   const { auth } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleRun = async () => {
     if (!auth.authenticated) {
@@ -16,17 +17,26 @@ export default function RunBotButton() {
     }
 
     if (!bot) {
-      addLog("warning", "No bot loaded. Please load a trade file first.");
+      addLog("warning", "No bot loaded. Please select a bot first.");
       return;
     }
 
     if (isRunning) {
+      // Stop — abort the SSE connection
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
       stopBot();
       addLog("info", "Bot stopped by user");
       return;
     }
 
     addLog("info", `Connecting to Deriv account ${auth.selectedAccount?.accountId ?? ""}...`);
+    startBot();
+
+    const abortController = new AbortController();
+    abortRef.current = abortController;
 
     try {
       const res = await fetch("/api/bot/run", {
@@ -38,24 +48,57 @@ export default function RunBotButton() {
           botCode: bot.code,
           botName: bot.name,
         }),
+        signal: abortController.signal,
       });
 
-      const data = await res.json();
-
-      if (res.ok) {
-        startBot();
-        addLog("success", data.message || `Bot "${bot.name}" started successfully`);
-        if (data.mode === "local") {
-          addLog("info", "Running in local simulation mode — no external engine configured");
-        }
-        if (auth.selectedAccount) {
-          addLog("info", `Account: ${auth.selectedAccount.accountId} | Balance: $${parseFloat(auth.selectedAccount.balance).toFixed(2)} ${auth.selectedAccount.currency}`);
-        }
-      } else {
-        addLog("error", data.error || "Failed to start bot");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "Unknown error" }));
+        addLog("error", errData.error || `Server error: ${res.status}`);
+        stopBot();
+        return;
       }
-    } catch {
-      addLog("error", "Network error — could not reach bot engine");
+
+      if (!res.body) {
+        addLog("error", "No response stream from server");
+        stopBot();
+        return;
+      }
+
+      // Read SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === "ping") continue;
+
+              const msgType = data.type === "error" ? "error" :
+                              data.type === "warn" ? "warning" :
+                              data.type === "success" ? "success" :
+                              "info";
+              addLog(msgType as any, data.message);
+            } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        addLog("error", `Connection error: ${err.message}`);
+      }
+    } finally {
+      stopBot();
+      abortRef.current = null;
     }
   };
 
@@ -65,7 +108,7 @@ export default function RunBotButton() {
         onClick={handleRun}
         disabled={!bot && !isRunning}
         className={`
-          relative px-4 sm:px-6 py-2 sm:py-2.5 rounded-md font-semibold text-xs sm:text-sm transition-all duration-200
+          relative px-4 sm:px-6 py-1.5 sm:py-2.5 rounded-md font-semibold text-xs sm:text-sm transition-all duration-200
           ${
             isRunning
               ? "bg-terminal-danger/20 border border-terminal-danger/50 text-terminal-danger hover:bg-terminal-danger/30"
