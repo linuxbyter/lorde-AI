@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/useAuth";
 
 export default function AuthStatus() {
   const router = useRouter();
-  const { auth, loading, logout } = useAuth();
+  const { auth, loading, logout, refresh } = useAuth();
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState("");
 
@@ -28,9 +28,8 @@ export default function AuthStatus() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountId }),
       });
-      // Refresh auth to get updated selected account
-      // This will trigger a re-fetch via useAuth's internal refresh? We'll manually refresh.
-      // We can call a refetch function, but we don't have it. Instead, we can close modal and let useEffect above update.
+      // Re-fetch auth so /api/auth/me reads the new cookie and returns updated selectedAccount
+      await refresh();
       setShowAccountModal(false);
     } catch (err) {
       console.error("Failed to select account:", err);
