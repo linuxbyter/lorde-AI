@@ -73,7 +73,7 @@ export default function AuthStatus() {
           </span>
           <div className="flex items-center gap-1">
             <span className={`text-[9px] sm:text-[10px] ${typeColor}`}>
-              ${selected.balance} {selected.currency}
+              ${(parseFloat(selected.balance) || 0).toFixed(2)} {selected.currency}
             </span>
             <span className="text-[8px] sm:text-[10px] text-terminal-muted px-1 sm:px-2 py-0.5 rounded bg-terminal-surface/20">
               {typeLabel}
@@ -135,7 +135,7 @@ export default function AuthStatus() {
                     <span className="text-[10px] sm:text-xs font-mono text-terminal-glow truncate">{acc.accountId}</span>
                     <div className="flex items-center gap-1.5">
                       <span className={`text-[9px] sm:text-[10px] ${acc.type === "demo" ? "text-terminal-glow" : acc.type === "real" ? "text-terminal-accent" : "text-terminal-muted"}`}>
-                        ${parseFloat(acc.balance).toFixed(2)} {acc.currency}
+                        ${(parseFloat(acc.balance) || 0).toFixed(2)} {acc.currency}
                       </span>
                       <span className="text-[8px] sm:text-[10px] text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-surface/20 uppercase">
                         {acc.type}

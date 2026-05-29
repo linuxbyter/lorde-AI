@@ -70,7 +70,7 @@ function DashboardInner() {
             </div>
             <div className="flex items-center gap-1">
               <span className={`text-xs sm:text-sm font-mono ${auth.authenticated && auth.selectedAccount ? (auth.selectedAccount.type === "demo" ? "text-terminal-glow glow-text" : auth.selectedAccount.type === "real" ? "text-terminal-accent" : "text-terminal-muted") : "text-terminal-muted"}`}>
-                {auth.authenticated && auth.selectedAccount ? parseFloat(auth.selectedAccount.balance).toFixed(2) : "0.00"}
+                {auth.authenticated && auth.selectedAccount ? (parseFloat(auth.selectedAccount.balance) || 0).toFixed(2) : "0.00"}
               </span>
               {auth.authenticated && auth.selectedAccount && (
                 <span className="text-[9px] sm:text-[10px] text-terminal-muted ml-1">{auth.selectedAccount.currency}</span>
