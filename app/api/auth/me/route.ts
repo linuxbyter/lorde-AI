@@ -40,9 +40,7 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    if (!accountsRes.ok) {
-      console.error("[Auth/me] Deriv accounts API returned:", accountsRes.status);
-    } else {
+    if (accountsRes.ok) {
       const accountsData = await accountsRes.json();
       if (accountsData.data && Array.isArray(accountsData.data)) {
         accounts = (accountsData.data as DerivAccount[]).map((acc: DerivAccount) => ({
@@ -52,9 +50,21 @@ export async function GET(request: NextRequest) {
           type: acc.account_type || "unknown",
         }));
       }
+    } else {
+      console.error("[Auth/me] Deriv accounts API returned:", accountsRes.status);
     }
   } catch (err) {
     console.error("[Auth/me] Failed to fetch accounts:", err);
+  }
+
+  // Fall back to cookie values if API returned nothing
+  if (accounts.length === 0) {
+    const cookieAccountId = readCookie(request, "deriv_account");
+    const cookieBalance = readCookie(request, "deriv_balance");
+    const cookieType = readCookie(request, "deriv_account_type");
+    if (cookieAccountId) {
+      accounts = [{ accountId: cookieAccountId, balance: cookieBalance || "0.00", currency: "USD", type: cookieType || "unknown" }];
+    }
   }
 
   const selectedAccountId = readCookie(request, "deriv_selected_account") || "";

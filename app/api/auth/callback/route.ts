@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+function base64urlDecode(str: string): string {
+  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(base64, "base64").toString("utf-8");
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
@@ -12,8 +17,6 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_BASE_URL || "https://lorde-ai-plum.vercel.app";
   const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
 
-  console.log("[Auth Callback] Received from Deriv:", Object.fromEntries(searchParams.entries()));
-
   if (error) {
     console.error("[Auth Callback] Deriv error:", error, errorDesc);
     return NextResponse.redirect(
@@ -23,9 +26,16 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
   const storedState = cookieStore.get("oauth_state")?.value;
-  const codeVerifier = cookieStore.get("pkce_verifier")?.value;
 
-  console.log("[Auth Callback] State match:", state === storedState, "Verifier present:", !!codeVerifier);
+  // Decode verifier from state param (embedded as stateRandom:codeVerifier)
+  let codeVerifier = "";
+  try {
+    const decoded = base64urlDecode(state || "");
+    const colonIdx = decoded.indexOf(":");
+    if (colonIdx > 0) {
+      codeVerifier = decoded.slice(colonIdx + 1);
+    }
+  } catch {}
 
   if (!state || state !== storedState) {
     console.error("[Auth Callback] State mismatch");
@@ -59,7 +69,6 @@ export async function GET(request: NextRequest) {
     });
 
     tokenData = await tokenRes.json();
-    console.log("[Auth Callback] Token response:", tokenData.access_token ? "OK" : "FAILED", tokenData.error || "");
 
     if (!tokenData.access_token) {
       console.error("[Auth Callback] No access_token:", tokenData);
@@ -74,9 +83,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Step 2: Fetch account info with BOTH required headers
+  // Step 2: Fetch account info
   let accountId = "";
   let balance = "0.00";
+  let accountType = "unknown";
+  let rawAccounts: string = "[]";
   try {
     const accountsRes = await fetch(
       "https://api.derivws.com/trading/v1/options/accounts",
@@ -94,12 +105,14 @@ export async function GET(request: NextRequest) {
     if (accountsData.data && accountsData.data.length > 0) {
       accountId = accountsData.data[0].account_id;
       balance = String(accountsData.data[0].balance || "0.00");
+      accountType = accountsData.data[0].account_type || "unknown";
+      rawAccounts = JSON.stringify(accountsData.data);
     }
   } catch (err) {
     console.error("[Auth Callback] Account fetch failed:", err);
   }
 
-  console.log("[Auth Callback] Account:", accountId, "Balance:", balance);
+  console.log("[Auth Callback] Account:", accountId, "Balance:", balance, "Type:", accountType);
 
   // Step 3: Set session cookies
   const expiresAt = Date.now() + (tokenData.expires_in || 3600) * 1000;
@@ -116,19 +129,21 @@ export async function GET(request: NextRequest) {
   response.cookies.set("deriv_token", tokenData.access_token!, cookieOpts);
   response.cookies.set("deriv_account", accountId, cookieOpts);
   response.cookies.set("deriv_balance", balance, cookieOpts);
+  response.cookies.set("deriv_account_type", accountType, cookieOpts);
   response.cookies.set("deriv_authenticated", "true", cookieOpts);
   response.cookies.set("deriv_expires_at", String(expiresAt), cookieOpts);
+  response.cookies.set("deriv_accounts", rawAccounts, { ...cookieOpts, maxAge: 600 });
 
   if (tokenData.refresh_token) {
     response.cookies.set("deriv_refresh_token", tokenData.refresh_token, {
       ...cookieOpts,
-      maxAge: 30 * 24 * 60 * 60, // 30 days for refresh token
+      maxAge: 30 * 24 * 60 * 60,
     });
   }
 
   // Clear PKCE cookies
-  response.cookies.set("pkce_verifier", "", { maxAge: 0, path: "/" });
-  response.cookies.set("oauth_state", "", { maxAge: 0, path: "/" });
+  cookieStore.set("pkce_verifier", "", { maxAge: 0, path: "/" });
+  cookieStore.set("oauth_state", "", { maxAge: 0, path: "/" });
 
   return response;
 }

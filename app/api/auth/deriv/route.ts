@@ -40,17 +40,11 @@ export async function GET() {
   const challengeHash = crypto.createHash("sha256").update(codeVerifier).digest();
   const codeChallenge = base64url(challengeHash);
 
-  // Generate state for CSRF
-  const state = base64url(crypto.randomBytes(16));
+  // Encode verifier inside state so it survives cross-site redirects (mobile fix)
+  const stateRandom = base64url(crypto.randomBytes(16));
+  const state = base64url(Buffer.from(stateRandom + ":" + codeVerifier));
 
   const cookieStore = await cookies();
-  cookieStore.set("pkce_verifier", codeVerifier, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 600,
-    path: "/",
-  });
   cookieStore.set("oauth_state", state, {
     httpOnly: true,
     secure: true,
