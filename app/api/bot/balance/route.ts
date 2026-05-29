@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
   const { token, accountId } = body;
 
   if (!token) {
-    return NextResponse.json(
-      { error: "Authentication required" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }
 
   const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
@@ -25,6 +28,10 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    if (!response.ok) {
+      return NextResponse.json({ balance: "0.00", currency: "USD", error: true });
+    }
+
     const data = await response.json();
 
     if (data.data && data.data.length > 0) {
@@ -40,8 +47,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ balance: "0.00", currency: "USD" });
+    return NextResponse.json({ balance: "0.00", currency: "USD", error: true });
   } catch {
-    return NextResponse.json({ balance: "0.00", currency: "USD" });
+    return NextResponse.json({ balance: "0.00", currency: "USD", error: true });
   }
 }

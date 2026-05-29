@@ -3,8 +3,20 @@ import vm from "vm";
 const WsModule = require("ws");
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { token, accountId, botCode, botName } = body;
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "Invalid request body" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const { accountId, botCode, botName } = body;
+
+  // Read token from httpOnly cookie (not from request body)
+  const token = request.cookies.get("deriv_token")?.value;
 
   if (!token || !accountId) {
     return new Response(
@@ -21,11 +33,15 @@ export async function POST(request: NextRequest) {
   }
 
   const encoder = new TextEncoder();
+  const BOT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max
 
   const stream = new ReadableStream({
     start(controller) {
       let closed = false;
       let pingInterval: ReturnType<typeof setInterval> | null = null;
+      let statsInterval: ReturnType<typeof setInterval> | null = null;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      let activeWs: any = null;
 
       const sendEvent = (data: Record<string, unknown>) => {
         if (closed) return;
@@ -35,14 +51,25 @@ export async function POST(request: NextRequest) {
       };
 
       const cleanup = () => {
+        if (closed) return;
         closed = true;
         if (pingInterval) clearInterval(pingInterval);
+        if (statsInterval) clearInterval(statsInterval);
+        if (timeoutId) clearTimeout(timeoutId);
+        if (activeWs && typeof activeWs.close === "function") {
+          try { activeWs.close(); } catch {}
+        }
         try { controller.close(); } catch {}
       };
 
+      // Timeout safety net
+      timeoutId = setTimeout(() => {
+        sendEvent({ type: "warn", message: `Bot timed out after ${BOT_TIMEOUT_MS / 1000}s` });
+        cleanup();
+      }, BOT_TIMEOUT_MS);
+
       // Set up sandbox context
       const moduleObj = { exports: {} as any };
-      let botWs: any = null;
 
       const sandbox: Record<string, any> = {
         module: moduleObj,
@@ -52,14 +79,24 @@ export async function POST(request: NextRequest) {
           error: (...args: any[]) => sendEvent({ type: "error", message: args.join(" ") }),
           warn: (...args: any[]) => sendEvent({ type: "warn", message: args.join(" ") }),
         },
-        fetch: globalThis.fetch,
+        // Network — restricted to Deriv only
+        fetch: async (url: string | Request, init?: RequestInit) => {
+          const urlStr = typeof url === "string" ? url : url.toString();
+          if (!urlStr.includes("derivws.com") && !urlStr.includes("auth.deriv.com")) {
+            throw new Error("Network access restricted to Deriv API only");
+          }
+          return globalThis.fetch(url, init);
+        },
         WebSocket: WsModule,
+        // Timer APIs
         setInterval: (fn: Function, ms: number) => {
-          return setInterval(() => { try { fn(); } catch {} }, ms);
+          const id = setInterval(() => { try { fn(); } catch {} }, ms);
+          return id;
         },
         setTimeout: (fn: Function, ms: number) => setTimeout(fn, ms),
         clearTimeout: clearTimeout,
         clearInterval: clearInterval,
+        // Core JS globals
         Date: Date,
         Math: Math,
         JSON: JSON,
@@ -67,13 +104,35 @@ export async function POST(request: NextRequest) {
         parseInt: parseInt,
         isNaN: isNaN,
         Infinity: Infinity,
-        Buffer: Buffer,
+        NaN: NaN,
+        undefined: undefined,
+        Array: Array,
+        Object: Object,
+        String: String,
+        Number: Number,
+        Boolean: Boolean,
+        Map: Map,
+        Set: Set,
+        RegExp: RegExp,
+        Error: Error,
+        TypeError: TypeError,
+        RangeError: RangeError,
+        Promise: Promise,
+        Symbol: Symbol,
         ArrayBuffer: ArrayBuffer,
         Uint8Array: Uint8Array,
+        Int8Array: Int8Array,
+        TextDecoder: TextDecoder,
+        TextEncoder: TextEncoder,
         URL: URL,
         URLSearchParams: URLSearchParams,
         encodeURIComponent: encodeURIComponent,
         decodeURIComponent: decodeURIComponent,
+        encodeURI: encodeURI,
+        decodeURI: decodeURI,
+        Buffer: Buffer,
+        globalThis: {},
+        // Module system
         require: (mod: string) => {
           if (mod === "ws") return WsModule;
           throw new Error(`Module "${mod}" is not available in sandbox`);
@@ -86,6 +145,9 @@ export async function POST(request: NextRequest) {
         },
         arguments: [],
       };
+
+      // Make globalThis reference itself
+      sandbox.globalThis = sandbox;
 
       const context = vm.createContext(sandbox);
 
@@ -126,10 +188,7 @@ export async function POST(request: NextRequest) {
 
       // Handle client disconnect
       request.signal.addEventListener("abort", () => {
-        // Try to close any open WebSocket
-        if (botWs && typeof botWs.close === "function") {
-          try { botWs.close(); } catch {}
-        }
+        sendEvent({ type: "warn", message: "Client disconnected, stopping bot..." });
         cleanup();
       });
     },

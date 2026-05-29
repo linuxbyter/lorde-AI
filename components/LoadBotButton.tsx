@@ -38,7 +38,7 @@ export default function LoadBotButton() {
       <input
         ref={inputRef}
         type="file"
-        accept=".js,.ts,.json,.bot"
+        accept=".js,.bot"
         onChange={handleChange}
         className="hidden"
       />

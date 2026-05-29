@@ -2,15 +2,16 @@
 
 import { useBotState } from "@/lib/botStore";
 import { useAuth } from "@/lib/authContext";
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 
 export default function RunBotButton() {
   const { bot, isRunning, startBot, stopBot, addLog } = useBotState();
   const { auth } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const sessionRef = useRef(0);
 
-  const handleRun = async () => {
+  const handleRun = useCallback(async () => {
     if (!auth.authenticated) {
       setShowAuthModal(true);
       return;
@@ -32,6 +33,9 @@ export default function RunBotButton() {
       return;
     }
 
+    // Increment session to invalidate any stale finally blocks
+    const mySession = ++sessionRef.current;
+
     addLog("info", `Connecting to Deriv account ${auth.selectedAccount?.accountId ?? ""}...`);
     startBot();
 
@@ -43,7 +47,6 @@ export default function RunBotButton() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          token: auth.token,
           accountId: auth.selectedAccount?.accountId,
           botCode: bot.code,
           botName: bot.name,
@@ -51,16 +54,19 @@ export default function RunBotButton() {
         signal: abortController.signal,
       });
 
+      // Check if this session is still current
+      if (mySession !== sessionRef.current) return;
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({ error: "Unknown error" }));
         addLog("error", errData.error || `Server error: ${res.status}`);
-        stopBot();
+        if (mySession === sessionRef.current) stopBot();
         return;
       }
 
       if (!res.body) {
         addLog("error", "No response stream from server");
-        stopBot();
+        if (mySession === sessionRef.current) stopBot();
         return;
       }
 
@@ -72,6 +78,7 @@ export default function RunBotButton() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (mySession !== sessionRef.current) break;
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -87,20 +94,25 @@ export default function RunBotButton() {
                               data.type === "warn" ? "warning" :
                               data.type === "success" ? "success" :
                               "info";
-              addLog(msgType as any, data.message);
+              addLog(msgType as "info" | "success" | "warning" | "error" | "trade", data.message);
             } catch {}
           }
         }
       }
     } catch (err: any) {
-      if (err.name !== "AbortError") {
+      if (err.name !== "AbortError" && mySession === sessionRef.current) {
         addLog("error", `Connection error: ${err.message}`);
       }
     } finally {
-      stopBot();
-      abortRef.current = null;
+      // Only stop bot if this is still the current session
+      if (mySession === sessionRef.current) {
+        stopBot();
+      }
+      if (abortRef.current === abortController) {
+        abortRef.current = null;
+      }
     }
-  };
+  }, [auth, bot, isRunning, startBot, stopBot, addLog]);
 
   return (
     <>
@@ -134,8 +146,8 @@ export default function RunBotButton() {
       </button>
 
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-full animate-slide-up shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-full mx-auto animate-slide-up shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-terminal-danger/20 flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4 sm:w-5 sm:h-5 text-terminal-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -100,8 +100,8 @@ export default function AuthStatus() {
 
       {/* Account Selector Modal */}
       {showAccountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-full animate-slide-up shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-full animate-slide-up shadow-2xl mx-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-terminal-glow/20 flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4 sm:w-5 sm:h-5 text-terminal-glow" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

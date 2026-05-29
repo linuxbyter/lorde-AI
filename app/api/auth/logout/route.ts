@@ -12,6 +12,7 @@ export async function GET() {
   response.cookies.set("deriv_authenticated", "", clearOpts);
   response.cookies.set("deriv_expires_at", "", clearOpts);
   response.cookies.set("deriv_refresh_token", "", clearOpts);
+  response.cookies.set("deriv_selected_account", "", clearOpts);
   response.cookies.set("pkce_verifier", "", clearOpts);
   response.cookies.set("oauth_state", "", clearOpts);
 

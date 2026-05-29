@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 
 export interface Account {
   accountId: string;
@@ -11,10 +11,8 @@ export interface Account {
 
 export interface AuthInfo {
   authenticated: boolean;
-  token: string;
   accounts: Account[];
   selectedAccount: Account | null;
-  expiresAt: number;
 }
 
 interface AuthContextType {
@@ -29,10 +27,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthInfo>({
     authenticated: false,
-    token: "",
     accounts: [],
     selectedAccount: null,
-    expiresAt: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -42,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       setAuth(data);
     } catch {
-      setAuth({ authenticated: false, token: "", accounts: [], selectedAccount: null, expiresAt: 0 });
+      setAuth({ authenticated: false, accounts: [], selectedAccount: null });
     } finally {
       setLoading(false);
     }

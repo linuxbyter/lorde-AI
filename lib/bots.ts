@@ -27,8 +27,6 @@ export const BOTS: BotDefinition[] = [
     ],
     code: `// 3P_Strategy_Bot.js
 // Probability + Patience + Protection
-// Strategy: Bollinger Bands + RSI with 3-ladder entry system
-// Trades: Over/Under (CALL/PUT) on Volatility indices
 
 module.exports = async function runBot(token, accountId, appId) {
   console.log("[3P BOT] Starting 3P Strategy Bot");
@@ -84,155 +82,12 @@ module.exports = async function runBot(token, accountId, appId) {
 
   var otpData = await otpRes.json();
   var wsUrl = otpData.data.url;
-
   console.log("[3P BOT] Got OTP, connecting WebSocket...");
 
   var WebSocket = require("ws");
   var ws = new WebSocket(wsUrl);
   var requestId = 1;
   var pendingRequests = {};
-
-  // Keep the bot alive until WebSocket closes
-  return new Promise(function(resolve) {
-    ws.on("open", function() {
-      console.log("[3P BOT] WebSocket connected");
-      state.isConnected = true;
-      ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId++ }));
-      ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId++ }));
-    });
-
-    ws.on("message", function(data) {
-      try {
-        var msg = JSON.parse(data);
-        handleMessage(msg);
-      } catch (err) {
-        console.error("[3P BOT] Parse error:", err.message);
-      }
-    });
-
-    ws.on("error", function(err) {
-      console.error("[3P BOT] WebSocket error:", err.message);
-      state.isConnected = false;
-    });
-
-    ws.on("close", function() {
-      console.log("[3P BOT] WebSocket closed");
-      state.isConnected = false;
-      resolve();
-    });
-  });
-
-  function handleMessage(msg) {
-    if (msg.balance) {
-      state.balance = parseFloat(msg.balance.balance);
-      if (CONFIG.sessionStartBalance === 0) {
-        CONFIG.sessionStartBalance = state.balance;
-      }
-      console.log("[3P BOT] Balance: $" + state.balance);
-    }
-
-    if (msg.tick) {
-      var tick = parseFloat(msg.tick.quote);
-      state.tickHistory.push(tick);
-      if (state.tickHistory.length > 100) {
-        state.tickHistory.shift();
-      }
-      if (state.tickHistory.length >= CONFIG.minTicksForSignal) {
-        evaluateAndTrade(tick);
-      }
-    }
-
-    if (msg.proposal) {
-      var callback = pendingRequests[msg.req_id];
-      if (callback) {
-        callback(msg.proposal);
-        delete pendingRequests[msg.req_id];
-      }
-    }
-
-    if (msg.buy) {
-      console.log("[3P BOT] Contract bought: " + msg.buy.contract_id);
-      state.openTrades.push({
-        contractId: msg.buy.contract_id,
-        buyPrice: msg.buy.buy_price,
-        entryTime: Date.now(),
-      });
-      ws.send(JSON.stringify({
-        proposal_open_contract: 1,
-        contract_id: msg.buy.contract_id,
-        subscribe: 1,
-        req_id: requestId++,
-      }));
-    }
-
-    if (msg.proposal_open_contract) {
-      var contract = msg.proposal_open_contract;
-      if (contract.status === "sold" || contract.is_expired === 1) {
-        var pnl = contract.profit || 0;
-        state.sessionPnL += pnl;
-        console.log("[3P BOT] Contract " + contract.contract_id + " closed | P&L: $" + pnl + " (" + (pnl > 0 ? "WIN" : "LOSS") + ") | Session P&L: $" + state.sessionPnL);
-        state.openTrades = state.openTrades.filter(function(t) { return t.contractId !== contract.contract_id; });
-        state.closedTrades.push({
-          contractId: contract.contract_id,
-          pnl: pnl,
-          result: pnl > 0 ? "win" : "loss",
-          closedTime: Date.now(),
-        });
-        checkDrawdown();
-      }
-    }
-  }
-
-  function evaluateAndTrade(currentPrice) {
-    var now = Date.now();
-    if (state.lastSignalTime && now - state.lastSignalTime < 5000) return;
-    if (state.openTrades.length >= CONFIG.maxOpenTrades) return;
-    if (state.tradesThisHour >= CONFIG.maxTradesPerHour) return;
-
-    var bb = calculateBollingerBands(state.tickHistory, CONFIG.bbPeriod, CONFIG.bbStdDev);
-    var rsi = calculateRSI(state.tickHistory, CONFIG.rsiPeriod);
-    if (!bb) return;
-
-    console.log("[3P BOT] Indicators - Price: $" + currentPrice.toFixed(2) + ", RSI: " + rsi.toFixed(1) + ", BB: [" + bb.lower.toFixed(2) + ", " + bb.middle.toFixed(2) + ", " + bb.upper.toFixed(2) + "]");
-
-    var signal = null;
-    var ladder = 0;
-    var confidence = 0;
-
-    if (currentPrice < bb.lower && rsi < CONFIG.rsiOversold) {
-      signal = "CALL";
-      confidence = 0.85;
-      ladder = 0;
-      console.log("[3P BOT] SIGNAL: CALL (Price oversold, RSI " + rsi.toFixed(1) + ")");
-    } else if (currentPrice > bb.upper && rsi > CONFIG.rsiOverbought) {
-      signal = "PUT";
-      confidence = 0.85;
-      ladder = 0;
-      console.log("[3P BOT] SIGNAL: PUT (Price overbought, RSI " + rsi.toFixed(1) + ")");
-    }
-
-    if (!signal) {
-      if (currentPrice < bb.lower - (bb.upper - bb.lower) * 0.1 && rsi < 45) {
-        signal = "CALL";
-        confidence = 0.65;
-        ladder = 1;
-        console.log("[3P BOT] SIGNAL: CALL (Weak, Price below BB)");
-      } else if (currentPrice > bb.upper + (bb.upper - bb.lower) * 0.1 && rsi > 55) {
-        signal = "PUT";
-        confidence = 0.65;
-        ladder = 1;
-        console.log("[3P BOT] SIGNAL: PUT (Weak, Price above BB)");
-      }
-    }
-
-    if (signal && confidence >= 0.65) {
-      state.lastSignalTime = now;
-      var stake = CONFIG.ladder[ladder];
-      console.log("[3P BOT] Executing " + signal + " with ladder " + (ladder + 1) + "/3 ($" + stake + ")");
-      requestProposal(signal, stake);
-      state.tradesThisHour++;
-    }
-  }
 
   function calculateBollingerBands(prices, period, stdDev) {
     if (prices.length < period) return null;
@@ -278,6 +133,49 @@ module.exports = async function runBot(token, accountId, appId) {
     };
   }
 
+  function evaluateAndTrade(currentPrice) {
+    var now = Date.now();
+    if (state.lastSignalTime && now - state.lastSignalTime < 5000) return;
+    if (state.openTrades.length >= CONFIG.maxOpenTrades) return;
+    if (state.tradesThisHour >= CONFIG.maxTradesPerHour) return;
+
+    var bb = calculateBollingerBands(state.tickHistory, CONFIG.bbPeriod, CONFIG.bbStdDev);
+    var rsi = calculateRSI(state.tickHistory, CONFIG.rsiPeriod);
+    if (!bb) return;
+
+    console.log("[3P BOT] Indicators - Price: $" + currentPrice.toFixed(2) + ", RSI: " + rsi.toFixed(1) + ", BB: [" + bb.lower.toFixed(2) + ", " + bb.middle.toFixed(2) + ", " + bb.upper.toFixed(2) + "]");
+
+    var signal = null;
+    var ladder = 0;
+    var confidence = 0;
+
+    if (currentPrice < bb.lower && rsi < CONFIG.rsiOversold) {
+      signal = "CALL"; confidence = 0.85; ladder = 0;
+      console.log("[3P BOT] SIGNAL: CALL (Price oversold, RSI " + rsi.toFixed(1) + ")");
+    } else if (currentPrice > bb.upper && rsi > CONFIG.rsiOverbought) {
+      signal = "PUT"; confidence = 0.85; ladder = 0;
+      console.log("[3P BOT] SIGNAL: PUT (Price overbought, RSI " + rsi.toFixed(1) + ")");
+    }
+
+    if (!signal) {
+      if (currentPrice < bb.lower - (bb.upper - bb.lower) * 0.1 && rsi < 45) {
+        signal = "CALL"; confidence = 0.65; ladder = 1;
+        console.log("[3P BOT] SIGNAL: CALL (Weak, Price below BB)");
+      } else if (currentPrice > bb.upper + (bb.upper - bb.lower) * 0.1 && rsi > 55) {
+        signal = "PUT"; confidence = 0.65; ladder = 1;
+        console.log("[3P BOT] SIGNAL: PUT (Weak, Price above BB)");
+      }
+    }
+
+    if (signal && confidence >= 0.65) {
+      state.lastSignalTime = now;
+      var stake = CONFIG.ladder[ladder];
+      console.log("[3P BOT] Executing " + signal + " with ladder " + (ladder + 1) + "/3 ($" + stake + ")");
+      requestProposal(signal, stake);
+      state.tradesThisHour++;
+    }
+  }
+
   function checkDrawdown() {
     var startBalance = CONFIG.sessionStartBalance;
     var currentBalance = state.balance;
@@ -290,13 +188,60 @@ module.exports = async function runBot(token, accountId, appId) {
     }
   }
 
-  setInterval(function() {
-    var winRate = state.closedTrades.length > 0
-      ? (state.closedTrades.filter(function(t) { return t.result === "win"; }).length / state.closedTrades.length * 100).toFixed(1)
-      : "0";
-    console.log("[3P BOT] === SESSION STATS === Balance: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win Rate: " + winRate + "% | Open: " + state.openTrades.length + " | Status: " + (state.isConnected ? "RUNNING" : "DISCONNECTED"));
-  }, 30000);
-  }); // end Promise
+  function handleMessage(msg) {
+    if (msg.balance) {
+      state.balance = parseFloat(msg.balance.balance);
+      if (CONFIG.sessionStartBalance === 0) CONFIG.sessionStartBalance = state.balance;
+      console.log("[3P BOT] Balance: $" + state.balance);
+    }
+    if (msg.tick) {
+      var tick = parseFloat(msg.tick.quote);
+      state.tickHistory.push(tick);
+      if (state.tickHistory.length > 100) state.tickHistory.shift();
+      if (state.tickHistory.length >= CONFIG.minTicksForSignal) evaluateAndTrade(tick);
+    }
+    if (msg.proposal) {
+      var callback = pendingRequests[msg.req_id];
+      if (callback) { callback(msg.proposal); delete pendingRequests[msg.req_id]; }
+    }
+    if (msg.buy) {
+      console.log("[3P BOT] Contract bought: " + msg.buy.contract_id);
+      state.openTrades.push({ contractId: msg.buy.contract_id, buyPrice: msg.buy.buy_price, entryTime: Date.now() });
+      ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1, req_id: requestId++ }));
+    }
+    if (msg.proposal_open_contract) {
+      var contract = msg.proposal_open_contract;
+      if (contract.status === "sold" || contract.is_expired === 1) {
+        var pnl = contract.profit || 0;
+        state.sessionPnL += pnl;
+        console.log("[3P BOT] Contract closed | P&L: $" + pnl + " (" + (pnl > 0 ? "WIN" : "LOSS") + ") | Session P&L: $" + state.sessionPnL);
+        state.openTrades = state.openTrades.filter(function(t) { return t.contractId !== contract.contract_id; });
+        state.closedTrades.push({ contractId: contract.contract_id, pnl: pnl, result: pnl > 0 ? "win" : "loss", closedTime: Date.now() });
+        checkDrawdown();
+      }
+    }
+  }
+
+  return new Promise(function(resolve) {
+    ws.on("open", function() {
+      console.log("[3P BOT] WebSocket connected");
+      state.isConnected = true;
+      ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId++ }));
+      ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId++ }));
+    });
+    ws.on("message", function(data) {
+      try { handleMessage(JSON.parse(data)); } catch (err) { console.error("[3P BOT] Parse error:", err.message); }
+    });
+    ws.on("error", function(err) { console.error("[3P BOT] WebSocket error:", err.message); state.isConnected = false; });
+    ws.on("close", function() { console.log("[3P BOT] WebSocket closed"); state.isConnected = false; resolve(); });
+
+    setInterval(function() {
+      var winRate = state.closedTrades.length > 0
+        ? (state.closedTrades.filter(function(t) { return t.result === "win"; }).length / state.closedTrades.length * 100).toFixed(1)
+        : "0";
+      console.log("[3P BOT] === STATS === Bal: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win: " + winRate + "% | Open: " + state.openTrades.length);
+    }, 30000);
+  });
 };`,
   },
 ];
