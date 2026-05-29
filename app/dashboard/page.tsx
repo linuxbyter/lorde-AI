@@ -9,6 +9,53 @@ import LoadBotButton from "@/components/LoadBotButton";
 import RunBotButton from "@/components/RunBotButton";
 import ConsoleLog from "@/components/ConsoleLog";
 
+// Mobile auth recovery helper
+function recoverMobileAuth() {
+  if (typeof window === "undefined") return;
+  
+  // Try to recover from localStorage if cookies failed
+  const savedAuth = localStorage.getItem("lorde_auth_state");
+  if (savedAuth) {
+    try {
+      const parsed = JSON.parse(savedAuth);
+      if (parsed.token && parsed.accountId) {
+        // Set cookies to recover auth state
+        document.cookie = `deriv_token=${parsed.token}; path=/; max-age=3600; secure; samesite=lax`;
+        document.cookie = `deriv_account=${parsed.accountId}; path=/; max-age=3600; secure; samesite=lax`;
+        document.cookie = `deriv_balance=${parsed.balance || "0.00"}; path=/; max-age=3600; secure; samesite=lax`;
+        document.cookie = `deriv_account_type=${parsed.accountType || "demo"}; path=/; max-age=3600; secure; samesite=lax`;
+        document.cookie = `deriv_authenticated=true; path=/; max-age=3600; secure; samesite=lax`;
+        
+        // Clear the recovery flag
+        localStorage.removeItem("lorde_auth_state");
+      }
+    } catch (e) {
+      console.warn("Failed to recover mobile auth:", e);
+    }
+  }
+}
+
+// Save auth state to localStorage for mobile recovery
+function saveAuthState() {
+  if (typeof window === "undefined") return;
+  
+  // Read cookies to save state (for mobile recovery)
+  const cookies = document.cookie.split("; ").reduce((acc, curr) => {
+    const [name, value] = curr.split("=");
+    acc[name] = value;
+    return acc;
+  }, {} as Record<string, string>);
+  
+  if (cookies.deriv_token && cookies.deriv_account) {
+    localStorage.setItem("lorde_auth_state", JSON.stringify({
+      token: cookies.deriv_token,
+      accountId: cookies.deriv_account,
+      balance: cookies.deriv_balance || "0.00",
+      accountType: cookies.deriv_account_type || "demo"
+    }));
+  }
+}
+
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-terminal-border bg-terminal-surface/50">
@@ -25,6 +72,12 @@ function DashboardInner() {
   const [showConsole, setShowConsole] = useState(false);
 
   useEffect(() => {
+    // Try to recover mobile auth state from localStorage
+    recoverMobileAuth();
+    
+    // Save current auth state to localStorage for recovery on next load
+    saveAuthState();
+    
     addLog("info", "Lorde Core Bot Terminal initialized");
   }, [addLog]);
 
