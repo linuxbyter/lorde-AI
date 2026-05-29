@@ -29,7 +29,7 @@ function DashboardInner() {
   }, [addLog]);
 
   return (
-    <div className="min-h-screen sm:h-screen flex flex-col bg-terminal-bg scan-overlay overflow-hidden">
+    <div className="min-h-screen sm:h-screen flex flex-col bg-terminal-bg overflow-hidden">
       {/* Header */}
       <header className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 border-b border-terminal-border bg-terminal-surface/80 backdrop-blur-sm z-10">
         <div className="flex items-center gap-2 sm:gap-3">

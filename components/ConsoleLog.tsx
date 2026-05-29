@@ -25,7 +25,14 @@ export default function ConsoleLog() {
   const [showAll, setShowAll] = useState(true);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = endRef.current?.parentElement;
+    if (el) {
+      const threshold = 60;
+      const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+      if (isNearBottom) {
+        endRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    }
   }, [logs]);
 
   const filteredLogs = showAll

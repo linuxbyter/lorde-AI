@@ -137,7 +137,6 @@ module.exports = async function runBot(token, accountId, appId) {
         duration: CONFIG.duration,
         duration_unit: CONFIG.durationUnit,
         underlying_symbol: CONFIG.symbol,
-        subscribe: 1,
         req_id: reqId,
       };
       console.log("[3P BOT] Proposal: " + signal + " $" + stake + " | ID:" + reqId);
