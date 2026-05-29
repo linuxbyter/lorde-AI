@@ -92,30 +92,34 @@ module.exports = async function runBot(token, accountId, appId) {
   var requestId = 1;
   var pendingRequests = {};
 
-  ws.on("open", function() {
-    console.log("[3P BOT] WebSocket connected");
-    state.isConnected = true;
-    ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId++ }));
-    ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId++ }));
-  });
+  // Keep the bot alive until WebSocket closes
+  return new Promise(function(resolve) {
+    ws.on("open", function() {
+      console.log("[3P BOT] WebSocket connected");
+      state.isConnected = true;
+      ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId++ }));
+      ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId++ }));
+    });
 
-  ws.on("message", function(data) {
-    try {
-      var msg = JSON.parse(data);
-      handleMessage(msg);
-    } catch (err) {
-      console.error("[3P BOT] Parse error:", err.message);
-    }
-  });
+    ws.on("message", function(data) {
+      try {
+        var msg = JSON.parse(data);
+        handleMessage(msg);
+      } catch (err) {
+        console.error("[3P BOT] Parse error:", err.message);
+      }
+    });
 
-  ws.on("error", function(err) {
-    console.error("[3P BOT] WebSocket error:", err.message);
-    state.isConnected = false;
-  });
+    ws.on("error", function(err) {
+      console.error("[3P BOT] WebSocket error:", err.message);
+      state.isConnected = false;
+    });
 
-  ws.on("close", function() {
-    console.log("[3P BOT] WebSocket closed");
-    state.isConnected = false;
+    ws.on("close", function() {
+      console.log("[3P BOT] WebSocket closed");
+      state.isConnected = false;
+      resolve();
+    });
   });
 
   function handleMessage(msg) {
@@ -292,6 +296,7 @@ module.exports = async function runBot(token, accountId, appId) {
       : "0";
     console.log("[3P BOT] === SESSION STATS === Balance: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win Rate: " + winRate + "% | Open: " + state.openTrades.length + " | Status: " + (state.isConnected ? "RUNNING" : "DISCONNECTED"));
   }, 30000);
+  }); // end Promise
 };`,
   },
 ];
