@@ -128,20 +128,22 @@ module.exports = async function runBot(token, accountId, appId) {
       var stake = CONFIG.ladder[ladder];
       console.log("[3P BOT] Executing " + signal + " with ladder " + (ladder + 1) + "/3 ($" + stake + ")");
       var reqId = requestId.value++;
-      var proposalPayload = {
-        proposal: 1,
-        amount: stake,
-        basis: "stake",
-        contract_type: signal,
-        currency: "USD",
-        duration: CONFIG.duration,
-        duration_unit: CONFIG.durationUnit,
-        underlying_symbol: CONFIG.symbol,
+      var buyPayload = {
+        buy: "1",
+        parameters: {
+          amount: stake,
+          basis: "stake",
+          contract_type: signal,
+          currency: "USD",
+          duration: CONFIG.duration,
+          duration_unit: CONFIG.durationUnit,
+          underlying_symbol: CONFIG.symbol,
+        },
+        price: stake,
         req_id: reqId,
       };
-      console.log("[3P BOT] Proposal: " + signal + " $" + stake + " | ID:" + reqId);
-      ws.send(JSON.stringify(proposalPayload));
-      pendingRequests[reqId] = { type: "proposal", time: Date.now() };
+      console.log("[3P BOT] Direct buy: " + signal + " $" + stake + " | ID:" + reqId);
+      ws.send(JSON.stringify(buyPayload));
       state.tradesThisHour++;
     }
   }
