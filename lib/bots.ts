@@ -201,8 +201,26 @@ module.exports = async function runBot(token, accountId, appId) {
       if (state.tickHistory.length >= CONFIG.minTicksForSignal) evaluateAndTrade(tick);
     }
     if (msg.proposal) {
+      // Try matching by req_id first, then try all pending
       var callback = pendingRequests[msg.req_id];
-      if (callback) { callback(msg.proposal); delete pendingRequests[msg.req_id]; }
+      if (!callback) {
+        // Fallback: take the oldest pending request
+        var keys = Object.keys(pendingRequests);
+        if (keys.length > 0) {
+          callback = pendingRequests[keys[0]];
+          delete pendingRequests[keys[0]];
+        }
+      } else {
+        delete pendingRequests[msg.req_id];
+      }
+      if (callback) {
+        callback(msg.proposal);
+      } else {
+        console.log("[3P BOT] Proposal received but no pending callback. req_id:", msg.req_id, "pending:", Object.keys(pendingRequests).length);
+      }
+    }
+    if (msg.error) {
+      console.error("[3P BOT] Deriv error:", msg.error.message || JSON.stringify(msg.error));
     }
     if (msg.buy) {
       console.log("[3P BOT] Contract bought: " + msg.buy.contract_id);
