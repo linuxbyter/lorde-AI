@@ -16,7 +16,7 @@ export default function RunBotButton() {
     }
 
     if (!bot) {
-      addLog("warning", "No bot loaded. Please load a trade file first.");
+      addLog("warning", "No bot loaded. Please load a bot file first.");
       return;
     }
 
@@ -28,7 +28,7 @@ export default function RunBotButton() {
     }
 
     // Start
-    addLog("info", `Connecting to Deriv account ${auth.accountId}...`);
+    addLog("info", `Connecting to Deriv account ${auth.selectedAccount?.accountId ?? ""}...`);
 
     try {
       const res = await fetch("/api/bot/run", {
@@ -36,7 +36,7 @@ export default function RunBotButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token: auth.token,
-          accountId: auth.accountId,
+          accountId: auth.selectedAccount?.accountId,
           botCode: bot.code,
           botName: bot.name,
         }),
@@ -50,7 +50,9 @@ export default function RunBotButton() {
         if (data.mode === "local") {
           addLog("info", "Running in local simulation mode — no external engine configured");
         }
-        addLog("info", `Account: ${auth.accountId} | Balance: $${parseFloat(auth.balance).toFixed(2)}`);
+        if (auth.selectedAccount) {
+          addLog("info", `Account: ${auth.selectedAccount.accountId} | Balance: $${parseFloat(auth.selectedAccount.balance).toFixed(2)} ${auth.selectedAccount.currency}`);
+        }
       } else {
         addLog("error", data.error || "Failed to start bot");
       }
@@ -68,16 +70,16 @@ export default function RunBotButton() {
           relative px-6 py-2.5 rounded-md font-semibold text-sm transition-all duration-200
           ${
             isRunning
-              ? "bg-terminal-danger/20 border border-terminal-danger/50 text-terminal-danger hover:bg-terminal-danger/30"
+              ? "bg-danger/20 border border-danger/50 text-danger hover:bg-danger/30"
               : bot
-              ? "bg-terminal-glow text-terminal-bg hover:bg-terminal-glow/90 hover:shadow-glow active:scale-[0.98]"
-              : "bg-terminal-surface border border-terminal-border text-terminal-muted cursor-not-allowed opacity-50"
+              ? "bg-green-600 text-bg hover:bg-green-600/90 hover:shadow-green-600/30 active:scale-[0.98]"
+              : "bg-surface border border-border-border text-muted cursor-not-allowed opacity-50"
           }
         `}
       >
         {isRunning ? (
           <span className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-terminal-danger animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-danger animate-pulse" />
             Stop Bot
           </span>
         ) : (
@@ -93,36 +95,35 @@ export default function RunBotButton() {
       {/* Auth Required Modal */}
       {showAuthModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-terminal-surface border border-terminal-border rounded-xl p-6 max-w-sm w-full mx-4 animate-slide-up shadow-2xl">
+          <div className="bg-surface border border-border rounded-xl p-6 max-w-sm w-full mx-4 animate-slide-up shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-terminal-danger/20 flex items-center justify-center">
-                <svg className="w-5 h-5 text-terminal-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              <div className="w-10 h-10 rounded-full bg-danger/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77-.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
               <div>
                 <h3 className="font-semibold text-sm">Authentication Required</h3>
-                <p className="text-xs text-terminal-muted">
-                  You haven&apos;t signed in via Deriv
+                <p className="text-xs text-muted">
+                  You haven't signed in via Deriv
                 </p>
               </div>
             </div>
-            <p className="text-sm text-terminal-muted mb-6 leading-relaxed">
-              Please log in to connect your account to authorize bot operations. Your Deriv
-              credentials are required to execute trades on your behalf.
+            <p className="text-sm text-muted mb-6 leading-relaxed">
+              Please log in to connect your account to authorize bot operations. Your Deriv credentials are required to execute trades on your behalf.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowAuthModal(false)}
-                className="flex-1 px-4 py-2 rounded-md border border-terminal-border text-sm text-terminal-muted 
-                  hover:bg-terminal-surface/80 transition-colors"
+                className="flex-1 px-4 py-2 rounded-md border border-border text-sm text-muted 
+                  hover:bg-surface/80 transition-colors"
               >
                 Cancel
               </button>
               <a
                 href="/api/auth/deriv"
-                className="flex-1 px-4 py-2 rounded-md bg-terminal-glow text-terminal-bg text-sm font-semibold 
-                  text-center hover:bg-terminal-glow/90 transition-colors hover:shadow-glow"
+                className="flex-1 px-4 py-2 rounded-md bg-green-600 text-bg text-sm font-semibold 
+                  text-center hover:bg-green-600/90 transition-colors hover:shadow-green-600/30"
               >
                 Connect Deriv Account
               </a>

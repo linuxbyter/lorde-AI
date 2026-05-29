@@ -51,7 +51,7 @@ function DashboardInner() {
                 <>
                   <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow" />
                   <span className="text-sm font-mono text-terminal-glow">
-                    {auth.accountId}
+                    {auth.selectedAccount?.accountId ?? ""}
                   </span>
                 </>
               ) : (
@@ -69,11 +69,11 @@ function DashboardInner() {
               Balance
             </div>
             <div className="flex items-center gap-1">
-              <span className={`text-sm font-mono ${auth.authenticated ? "text-terminal-glow glow-text" : "text-terminal-muted"}`}>
-                ${auth.authenticated ? parseFloat(auth.balance).toFixed(2) : "0.00"}
+              <span className={`text-sm font-mono ${auth.authenticated && auth.selectedAccount ? (auth.selectedAccount.type === "demo" ? "text-terminal-glow glow-text" : auth.selectedAccount.type === "real" ? "text-terminal-accent" : "text-terminal-muted") : "text-terminal-muted"}`}>
+                {auth.authenticated && auth.selectedAccount ? parseFloat(auth.selectedAccount.balance).toFixed(2) : "0.00"}
               </span>
-              {auth.authenticated && (
-                <span className="text-[10px] text-terminal-muted ml-1">USD</span>
+              {auth.authenticated && auth.selectedAccount && (
+                <span className="text-[10px] text-terminal-muted ml-1">{auth.selectedAccount.currency}</span>
               )}
             </div>
           </div>

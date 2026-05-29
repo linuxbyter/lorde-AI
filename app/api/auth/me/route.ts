@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
 function readCookie(request: NextRequest, name: string): string {
   return request.cookies.get(name)?.value || "";
+}
+
+interface DerivAccount {
+  account_id: string;
+  balance: number;
+  currency: string;
+  account_type?: string; // "demo" or "real"
 }
 
 export async function GET(request: NextRequest) {
@@ -13,57 +19,49 @@ export async function GET(request: NextRequest) {
   }
 
   const token = readCookie(request, "deriv_token");
-  const accountId = readCookie(request, "deriv_account");
-  const balance = readCookie(request, "deriv_balance") || "0.00";
-  const expiresAt = Number(readCookie(request, "deriv_expires_at") || "0");
-  const refreshToken = readCookie(request, "deriv_refresh_token");
+  const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
 
-  // Check if token is expired or about to expire (within 5 minutes)
-  const now = Date.now();
-  const isExpired = expiresAt > 0 && now >= expiresAt - 5 * 60 * 1000;
-
-  if (isExpired && refreshToken) {
-    // Try to refresh the token
-    const clientId = process.env.NEXT_PUBLIC_DERIV_APP_ID;
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://lorde-ai-plum.vercel.app";
-
-    try {
-      const tokenRes = await fetch("https://auth.deriv.com/oauth2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          client_id: clientId!,
-          refresh_token: refreshToken,
-        }).toString(),
-      });
-
-      const tokenData = await tokenRes.json();
-
-      if (tokenData.access_token) {
-        const newExpiresAt = Date.now() + (tokenData.expires_in || 3600) * 1000;
-
-        // Set new cookies (we can't set httpOnly cookies from a GET response
-        // that the client will read, but we can return the new token info)
-        return NextResponse.json({
-          authenticated: true,
-          token: tokenData.access_token,
-          accountId,
-          balance,
-          refreshed: true,
-          expiresAt: newExpiresAt,
-        });
+  // Fetch all accounts
+  let accounts: Array<{
+    accountId: string;
+    balance: string;
+    currency: string;
+    type: string;
+  }> = [];
+  try {
+    const accountsRes = await fetch(
+      "https://api.derivws.com/trading/v1/options/accounts",
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Deriv-App-ID": clientId!,
+          "Content-Type": "application/json",
+        },
       }
-    } catch {
-      // Refresh failed, user needs to re-auth
+    );
+    const accountsData = await accountsRes.json();
+    if (accountsData.data && Array.isArray(accountsData.data)) {
+      accounts = (accountsData.data as DerivAccount[]).map((acc: DerivAccount) => ({
+        accountId: acc.account_id,
+        balance: String(acc.balance || "0.00"),
+        currency: acc.currency || "USD",
+        type: acc.account_type || "unknown",
+      }));
     }
+  } catch (err) {
+    console.error("[Auth/me] Failed to fetch accounts:", err);
+    // fallback to empty
   }
+
+  // Determine selected account from cookie
+  const selectedAccountId = readCookie(request, "deriv_selected_account") || "";
+  // If no selected account cookie, default to first account if exists
+  const selected = accounts.find(acc => acc.accountId === selectedAccountId) || accounts[0] || null;
 
   return NextResponse.json({
     authenticated: true,
     token,
-    accountId,
-    balance,
-    expiresAt,
+    accounts,
+    selectedAccount: selected ?? { accountId: "", balance: "0.00", currency: "USD", type: "unknown" },
   });
 }

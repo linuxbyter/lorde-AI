@@ -2,11 +2,18 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 
+export interface Account {
+  accountId: string;
+  balance: string;
+  currency: string;
+  type: string; // "demo" or "real"
+}
+
 export interface AuthInfo {
   authenticated: boolean;
   token: string;
-  accountId: string;
-  balance: string;
+  accounts: Account[];
+  selectedAccount: Account | null;
   expiresAt: number;
 }
 
@@ -14,8 +21,8 @@ export function useAuth() {
   const [auth, setAuth] = useState<AuthInfo>({
     authenticated: false,
     token: "",
-    accountId: "",
-    balance: "0.00",
+    accounts: [],
+    selectedAccount: null,
     expiresAt: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -34,28 +41,35 @@ export function useAuth() {
         // This is a limitation - we'll just use the new token in memory
       }
     } catch {
-      setAuth({ authenticated: false, token: "", accountId: "", balance: "0.00", expiresAt: 0 });
+      setAuth({ authenticated: false, token: "", accounts: [], selectedAccount: null, expiresAt: 0 });
     } finally {
       setLoading(false);
     }
   }, []);
 
   const fetchBalance = useCallback(async () => {
-    if (!auth.token || !auth.accountId) return;
+    if (!auth.token || !auth.selectedAccount?.accountId) return;
     try {
       const res = await fetch("/api/bot/balance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: auth.token, accountId: auth.accountId }),
+        body: JSON.stringify({ token: auth.token, accountId: auth.selectedAccount.accountId }),
       });
       const data = await res.json();
-      if (data.balance && data.balance !== auth.balance) {
-        setAuth((prev) => ({ ...prev, balance: data.balance }));
+      if (data.balance && data.balance !== auth.selectedAccount.balance) {
+        // Update selectedAccount balance in auth state
+        setAuth(prev => ({
+          ...prev,
+          selectedAccount: {
+            ...prev.selectedAccount!,
+            balance: data.balance
+          }
+        }));
       }
     } catch {
       // Silent fail for balance polling
     }
-  }, [auth.token, auth.accountId, auth.balance]);
+  }, [auth.token, auth.selectedAccount?.accountId, auth.selectedAccount?.balance]);
 
   useEffect(() => {
     refresh();

@@ -1,15 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
-
-const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-
-function generateCodeVerifier(): string {
-  const bytes = crypto.randomBytes(43);
-  return Array.from(bytes)
-    .map((b) => CHARSET[b % CHARSET.length])
-    .join("");
-}
 
 function base64url(buffer: Buffer) {
   return buffer
@@ -17,6 +8,13 @@ function base64url(buffer: Buffer) {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+function generateCodeVerifier(): string {
+  const array = crypto.randomBytes(32);
+  return Array.from(array)
+    .map(v => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'[v % 66])
+    .join('');
 }
 
 export async function GET() {
@@ -37,12 +35,12 @@ export async function GET() {
     );
   }
 
+  // Generate PKCE
   const codeVerifier = generateCodeVerifier();
-  const challengeHash = crypto
-    .createHash("sha256")
-    .update(codeVerifier)
-    .digest();
+  const challengeHash = crypto.createHash("sha256").update(codeVerifier).digest();
   const codeChallenge = base64url(challengeHash);
+
+  // Generate state for CSRF
   const state = base64url(crypto.randomBytes(16));
 
   const cookieStore = await cookies();
@@ -73,7 +71,7 @@ export async function GET() {
     code_challenge_method: "S256",
   });
 
-  const authUrl = `https://auth.deriv.com/oauth2/auth?${params.toString()}`;
-
-  return NextResponse.redirect(authUrl);
+  return NextResponse.redirect(
+    `https://auth.deriv.com/oauth2/auth?${params.toString()}`
+  );
 }
