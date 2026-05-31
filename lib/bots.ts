@@ -27,7 +27,7 @@ export const BOTS: BotDefinition[] = [
     ],
     code: `// 3P_Strategy_Bot.js
 // Probability + Patience + Protection
-// Uses proper Deriv WebSocket flow: proposal -> buy -> monitor
+// Uses Legacy Deriv WebSocket API for full trading support
 
 module.exports = async function runBot(token, accountId, appId) {
   console.log("[3P BOT] Starting 3P Strategy Bot");
@@ -58,7 +58,7 @@ module.exports = async function runBot(token, accountId, appId) {
     openTrades: [],
     closedTrades: [],
     tickHistory: [],
-    isConnected: false,
+    isAuthorized: false,
     lastSignalTime: null,
     tradesThisHour: 0,
     sessionPnL: 0,
@@ -153,9 +153,17 @@ module.exports = async function runBot(token, accountId, appId) {
   }
 
   function handleMessage(msg, ws, requestId, pendingRequests) {
+    if (msg.authorize) {
+      state.isAuthorized = true;
+      console.log("[3P BOT] Authorized! Account: " + (msg.authorize.loginid || accountId) + ", Currency: " + (msg.authorize.currency || "USD"));
+      state.currency = msg.authorize.currency || "USD";
+      ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId.value++ }));
+      ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId.value++ }));
+    }
+
     if (msg.balance) {
       state.balance = parseFloat(msg.balance.balance);
-      state.currency = msg.balance.currency || "USD";
+      if (msg.balance.currency) state.currency = msg.balance.currency;
       if (CONFIG.sessionStartBalance === 0) CONFIG.sessionStartBalance = state.balance;
       console.log("[3P BOT] Balance: $" + state.balance + " " + state.currency);
     }
@@ -222,64 +230,44 @@ module.exports = async function runBot(token, accountId, appId) {
     }
   }
 
-  async function getOtp() {
-    var otpRes = await fetch("https://api.derivws.com/trading/v1/options/accounts/" + accountId + "/otp", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + token, "Deriv-App-ID": appId, "Content-Type": "application/json" },
-    });
-    if (!otpRes.ok) {
-      var errText = await otpRes.text();
-      throw new Error("OTP failed (" + otpRes.status + "): " + errText.substring(0, 200));
-    }
-    var otpData = await otpRes.json();
-    if (!otpData.data || !otpData.data.url) throw new Error("OTP response missing URL");
-    return otpData.data.url;
-  }
-
   function connectLoop() {
-    getOtp().then(function(wsUrl) {
-      console.log("[3P BOT] Connecting to WebSocket...");
-      var ws = new WebSocket(wsUrl);
-      var requestId = { value: 1 };
-      var pendingRequests = {};
+    var wsUrl = "wss://ws.derivws.com/websockets/v3?app_id=" + appId;
+    console.log("[3P BOT] Connecting to Legacy WebSocket...");
+    var ws = new WebSocket(wsUrl);
+    var requestId = { value: 1 };
+    var pendingRequests = {};
 
-      ws.on("open", function() {
-        console.log("[3P BOT] WebSocket connected");
-        state.isConnected = true;
-        ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId.value++ }));
-        ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId.value++ }));
-      });
+    ws.on("open", function() {
+      console.log("[3P BOT] WebSocket connected, authorizing...");
+      ws.send(JSON.stringify({ authorize: token, req_id: requestId.value++ }));
+    });
 
-      ws.on("message", function(data) {
-        try {
-          var parsed = JSON.parse(data.toString());
-          if (!parsed.tick && parsed.msg_type !== "balance") {
-            console.log("[3P BOT] WS:", parsed.msg_type || "unknown", JSON.stringify(parsed).substring(0, 400));
-          }
-          handleMessage(parsed, ws, requestId, pendingRequests);
-        } catch (err) { console.error("[3P BOT] Parse error:", err.message); }
-      });
+    ws.on("message", function(data) {
+      try {
+        var parsed = JSON.parse(data.toString());
+        if (!parsed.tick && parsed.msg_type !== "balance" && parsed.msg_type !== "tick") {
+          console.log("[3P BOT] WS:", parsed.msg_type || "unknown", JSON.stringify(parsed).substring(0, 400));
+        }
+        handleMessage(parsed, ws, requestId, pendingRequests);
+      } catch (err) { console.error("[3P BOT] Parse error:", err.message); }
+    });
 
-      ws.on("error", function(err) {
-        console.error("[3P BOT] WebSocket error:", err.message);
-      });
+    ws.on("error", function(err) {
+      console.error("[3P BOT] WebSocket error:", err.message);
+    });
 
-      ws.on("close", function(code, reason) {
-        console.log("[3P BOT] WebSocket closed - code: " + code + " reason: " + (reason ? reason.toString() : "none"));
-        state.isConnected = false;
-        setTimeout(connectLoop, CONFIG.reconnectDelay);
-      });
-
-      setInterval(function() {
-        var winRate = state.closedTrades.length > 0
-          ? (state.closedTrades.filter(function(t) { return t.result === "win"; }).length / state.closedTrades.length * 100).toFixed(1)
-          : "0";
-        console.log("[3P BOT] === STATS === Bal: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win: " + winRate + "% | Open: " + state.openTrades.length);
-      }, 30000);
-    }).catch(function(err) {
-      console.error("[3P BOT] Connection error:", err.message, "- retrying in " + (CONFIG.reconnectDelay / 1000) + "s...");
+    ws.on("close", function(code, reason) {
+      console.log("[3P BOT] WebSocket closed - code: " + code + " reason: " + (reason ? reason.toString() : "none"));
+      state.isAuthorized = false;
       setTimeout(connectLoop, CONFIG.reconnectDelay);
     });
+
+    setInterval(function() {
+      var winRate = state.closedTrades.length > 0
+        ? (state.closedTrades.filter(function(t) { return t.result === "win"; }).length / state.closedTrades.length * 100).toFixed(1)
+        : "0";
+      console.log("[3P BOT] === STATS === Bal: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win: " + winRate + "% | Open: " + state.openTrades.length);
+    }, 30000);
   }
 
   connectLoop();
