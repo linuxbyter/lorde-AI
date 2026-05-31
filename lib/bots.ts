@@ -27,7 +27,7 @@ export const BOTS: BotDefinition[] = [
     ],
     code: `// 3P_Strategy_Bot.js
 // Probability + Patience + Protection
-// Uses Legacy Deriv WebSocket API for full trading support
+// Hybrid: WS for streaming, REST for trading
 
 module.exports = async function runBot(token, accountId, appId) {
   console.log("[3P BOT] Starting 3P Strategy Bot");
@@ -35,7 +35,6 @@ module.exports = async function runBot(token, accountId, appId) {
 
   var CONFIG = {
     symbol: "R_100",
-    baseBet: 10,
     ladder: [10, 15, 20],
     duration: 60,
     durationUnit: "s",
@@ -91,25 +90,72 @@ module.exports = async function runBot(token, accountId, appId) {
     return 100 - 100 / (1 + rs);
   }
 
-  function requestProposal(ws, requestId, pendingRequests, signal, stake) {
-    var reqId = requestId.value++;
-    pendingRequests[reqId] = { action: "buy", signal: signal, stake: stake, time: Date.now() };
-    var proposalPayload = {
-      proposal: 1,
-      amount: stake,
-      basis: "stake",
-      contract_type: signal,
-      currency: state.currency,
-      duration: CONFIG.duration,
-      duration_unit: CONFIG.durationUnit,
-      underlying_symbol: CONFIG.symbol,
-      req_id: reqId,
-    };
-    console.log("[3P BOT] Requesting proposal: " + signal + " $" + stake + " on " + CONFIG.symbol + " | req_id:" + reqId);
-    ws.send(JSON.stringify(proposalPayload));
+  async function executeTrade(signal, stake, ws, requestId) {
+    try {
+      console.log("[3P BOT] Executing trade via REST: " + signal + " $" + stake);
+      var res = await fetch("https://api.derivws.com/trading/v1/options/accounts/" + accountId + "/contracts", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Deriv-App-ID": appId,
+        },
+        body: JSON.stringify({
+          amount: stake,
+          basis: "stake",
+          contract_type: signal,
+          currency: state.currency,
+          duration: CONFIG.duration,
+          duration_unit: CONFIG.durationUnit,
+          underlying_symbol: CONFIG.symbol,
+        }),
+      });
+      var tradeData = await res.json();
+      console.log("[3P BOT] REST response:", JSON.stringify(tradeData).substring(0, 500));
+
+      if (tradeData.error) {
+        console.error("[3P BOT] Trade error:", tradeData.error.message || JSON.stringify(tradeData.error));
+        return;
+      }
+
+      if (tradeData.data) {
+        var d = tradeData.data;
+        if (d.contract_id) {
+          console.log("[3P BOT] Contract bought! ID: " + d.contract_id + " | Payout: $" + (d.payout || "?"));
+          state.openTrades.push({ contractId: d.contract_id, buyPrice: d.buy_price || stake, entryTime: Date.now() });
+          if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: d.contract_id, subscribe: 1, req_id: requestId.value++ }));
+          }
+        } else if (d.id) {
+          console.log("[3P BOT] Proposal received - Ask: $" + d.ask_price + ", Payout: $" + d.payout + ", ID: " + d.id);
+          var buyRes = await fetch("https://api.derivws.com/trading/v1/options/accounts/" + accountId + "/contracts/" + d.id + "/buy", {
+            method: "POST",
+            headers: {
+              "Authorization": "Bearer " + token,
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "Deriv-App-ID": appId,
+            },
+            body: JSON.stringify({ price: d.ask_price }),
+          });
+          var buyData = await buyRes.json();
+          console.log("[3P BOT] Buy response:", JSON.stringify(buyData).substring(0, 500));
+          if (buyData.data && buyData.data.contract_id) {
+            console.log("[3P BOT] Contract bought! ID: " + buyData.data.contract_id);
+            state.openTrades.push({ contractId: buyData.data.contract_id, buyPrice: d.ask_price, entryTime: Date.now() });
+            if (ws && ws.readyState === 1) {
+              ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: buyData.data.contract_id, subscribe: 1, req_id: requestId.value++ }));
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[3P BOT] Trade execution failed:", err.message);
+    }
   }
 
-  function evaluateAndTrade(currentPrice, ws, requestId, pendingRequests) {
+  function evaluateAndTrade(currentPrice, ws, requestId) {
     var now = Date.now();
     if (state.lastSignalTime && now - state.lastSignalTime < 15000) return;
     if (state.openTrades.length >= CONFIG.maxOpenTrades) return;
@@ -146,21 +192,13 @@ module.exports = async function runBot(token, accountId, appId) {
     if (signal && confidence >= 0.65) {
       state.lastSignalTime = now;
       var stake = CONFIG.ladder[ladder];
-      console.log("[3P BOT] Ladder " + (ladder + 1) + "/3 - requesting proposal for $" + stake);
-      requestProposal(ws, requestId, pendingRequests, signal, stake);
+      console.log("[3P BOT] Ladder " + (ladder + 1) + "/3 - executing trade for $" + stake);
       state.tradesThisHour++;
+      executeTrade(signal, stake, ws, requestId);
     }
   }
 
-  function handleMessage(msg, ws, requestId, pendingRequests) {
-    if (msg.authorize) {
-      state.isAuthorized = true;
-      console.log("[3P BOT] Authorized! Account: " + (msg.authorize.loginid || accountId) + ", Currency: " + (msg.authorize.currency || "USD"));
-      state.currency = msg.authorize.currency || "USD";
-      ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId.value++ }));
-      ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId.value++ }));
-    }
-
+  function handleMessage(msg, ws, requestId) {
     if (msg.balance) {
       state.balance = parseFloat(msg.balance.balance);
       if (msg.balance.currency) state.currency = msg.balance.currency;
@@ -172,40 +210,11 @@ module.exports = async function runBot(token, accountId, appId) {
       var tick = parseFloat(msg.tick.quote);
       state.tickHistory.push(tick);
       if (state.tickHistory.length > 100) state.tickHistory.shift();
-      if (state.tickHistory.length >= CONFIG.minTicksForSignal) evaluateAndTrade(tick, ws, requestId, pendingRequests);
-    }
-
-    if (msg.proposal) {
-      var reqId = msg.req_id;
-      var pending = pendingRequests[reqId];
-      if (pending && pending.action === "buy") {
-        delete pendingRequests[reqId];
-        var askPrice = msg.proposal.ask_price;
-        var payout = msg.proposal.payout;
-        var proposalId = msg.proposal.id;
-        console.log("[3P BOT] Proposal received - Ask: $" + askPrice + ", Payout: $" + payout + ", ID: " + proposalId);
-        var buyPayload = {
-          buy: proposalId,
-          price: askPrice,
-          req_id: requestId.value++,
-        };
-        console.log("[3P BOT] Sending buy order...");
-        ws.send(JSON.stringify(buyPayload));
-      }
+      if (state.tickHistory.length >= CONFIG.minTicksForSignal) evaluateAndTrade(tick, ws, requestId);
     }
 
     if (msg.error) {
       console.error("[3P BOT] Deriv error:", msg.error.message || JSON.stringify(msg.error));
-      if (msg.req_id && pendingRequests[msg.req_id]) {
-        console.error("[3P BOT] Failed request was for:", pendingRequests[msg.req_id].signal, "$" + pendingRequests[msg.req_id].stake);
-        delete pendingRequests[msg.req_id];
-      }
-    }
-
-    if (msg.buy) {
-      console.log("[3P BOT] Contract bought! ID: " + msg.buy.contract_id + " | Price: $" + msg.buy.buy_price + " | Payout: $" + msg.buy.payout);
-      state.openTrades.push({ contractId: msg.buy.contract_id, buyPrice: msg.buy.buy_price, entryTime: Date.now() });
-      ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: msg.buy.contract_id, subscribe: 1, req_id: requestId.value++ }));
     }
 
     if (msg.proposal_open_contract) {
@@ -230,44 +239,63 @@ module.exports = async function runBot(token, accountId, appId) {
     }
   }
 
+  async function getOtp() {
+    var otpRes = await fetch("https://api.derivws.com/trading/v1/options/accounts/" + accountId + "/otp", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Deriv-App-ID": appId, "Content-Type": "application/json" },
+    });
+    if (!otpRes.ok) {
+      var errText = await otpRes.text();
+      throw new Error("OTP failed (" + otpRes.status + "): " + errText.substring(0, 200));
+    }
+    var otpData = await otpRes.json();
+    if (!otpData.data || !otpData.data.url) throw new Error("OTP response missing URL");
+    return otpData.data.url;
+  }
+
   function connectLoop() {
-    var wsUrl = "wss://ws.derivws.com/websockets/v3?app_id=" + appId;
-    console.log("[3P BOT] Connecting to Legacy WebSocket...");
-    var ws = new WebSocket(wsUrl);
-    var requestId = { value: 1 };
-    var pendingRequests = {};
+    getOtp().then(function(wsUrl) {
+      console.log("[3P BOT] Connecting to WebSocket for streaming...");
+      var ws = new WebSocket(wsUrl);
+      var requestId = { value: 1 };
 
-    ws.on("open", function() {
-      console.log("[3P BOT] WebSocket connected, authorizing...");
-      ws.send(JSON.stringify({ authorize: token, req_id: requestId.value++ }));
-    });
+      ws.on("open", function() {
+        console.log("[3P BOT] WebSocket connected");
+        state.isAuthorized = true;
+        ws.send(JSON.stringify({ balance: 1, subscribe: 1, req_id: requestId.value++ }));
+        ws.send(JSON.stringify({ ticks: CONFIG.symbol, subscribe: 1, req_id: requestId.value++ }));
+      });
 
-    ws.on("message", function(data) {
-      try {
-        var parsed = JSON.parse(data.toString());
-        if (!parsed.tick && parsed.msg_type !== "balance" && parsed.msg_type !== "tick") {
-          console.log("[3P BOT] WS:", parsed.msg_type || "unknown", JSON.stringify(parsed).substring(0, 400));
-        }
-        handleMessage(parsed, ws, requestId, pendingRequests);
-      } catch (err) { console.error("[3P BOT] Parse error:", err.message); }
-    });
+      ws.on("message", function(data) {
+        try {
+          var parsed = JSON.parse(data.toString());
+          if (!parsed.tick && parsed.msg_type !== "balance" && parsed.msg_type !== "tick") {
+            console.log("[3P BOT] WS:", parsed.msg_type || "unknown", JSON.stringify(parsed).substring(0, 400));
+          }
+          handleMessage(parsed, ws, requestId);
+        } catch (err) { console.error("[3P BOT] Parse error:", err.message); }
+      });
 
-    ws.on("error", function(err) {
-      console.error("[3P BOT] WebSocket error:", err.message);
-    });
+      ws.on("error", function(err) {
+        console.error("[3P BOT] WebSocket error:", err.message);
+      });
 
-    ws.on("close", function(code, reason) {
-      console.log("[3P BOT] WebSocket closed - code: " + code + " reason: " + (reason ? reason.toString() : "none"));
-      state.isAuthorized = false;
+      ws.on("close", function(code, reason) {
+        console.log("[3P BOT] WebSocket closed - code: " + code + " reason: " + (reason ? reason.toString() : "none"));
+        state.isAuthorized = false;
+        setTimeout(connectLoop, CONFIG.reconnectDelay);
+      });
+
+      setInterval(function() {
+        var winRate = state.closedTrades.length > 0
+          ? (state.closedTrades.filter(function(t) { return t.result === "win"; }).length / state.closedTrades.length * 100).toFixed(1)
+          : "0";
+        console.log("[3P BOT] === STATS === Bal: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win: " + winRate + "% | Open: " + state.openTrades.length);
+      }, 30000);
+    }).catch(function(err) {
+      console.error("[3P BOT] Connection error:", err.message, "- retrying in " + (CONFIG.reconnectDelay / 1000) + "s...");
       setTimeout(connectLoop, CONFIG.reconnectDelay);
     });
-
-    setInterval(function() {
-      var winRate = state.closedTrades.length > 0
-        ? (state.closedTrades.filter(function(t) { return t.result === "win"; }).length / state.closedTrades.length * 100).toFixed(1)
-        : "0";
-      console.log("[3P BOT] === STATS === Bal: $" + state.balance + " | P&L: $" + state.sessionPnL + " | Trades: " + state.closedTrades.length + " | Win: " + winRate + "% | Open: " + state.openTrades.length);
-    }, 30000);
   }
 
   connectLoop();
