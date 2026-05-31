@@ -9,6 +9,8 @@ interface DerivAccount {
   balance: number;
   currency: string;
   account_type?: string;
+  group?: string;
+  status?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -28,7 +30,7 @@ export async function GET(request: NextRequest) {
     type: string;
   }> = [];
 
-  // Step 1: Try live Deriv API to get fresh account data
+  // Step 1: Try live Deriv API
   try {
     const accountsRes = await fetch(
       "https://api.derivws.com/trading/v1/options/accounts",
@@ -43,17 +45,35 @@ export async function GET(request: NextRequest) {
 
     if (accountsRes.ok) {
       const accountsData = await accountsRes.json();
+      console.log("[Auth/me] API response:", JSON.stringify(accountsData).substring(0, 500));
+
       if (accountsData.data) {
         let accountsArray: DerivAccount[] = [];
+
         if (Array.isArray(accountsData.data)) {
-          accountsArray = accountsData.data as DerivAccount[];
-        } else if (typeof accountsData.data === 'object' && accountsData.data !== null) {
+          // Array format: [{ account_id, balance, ... }]
+          accountsArray = accountsData.data;
+        } else if (typeof accountsData.data === "object" && accountsData.data !== null) {
+          // Object format: { demo: { account_id, ... }, real: { account_id, ... } }
+          // OR single account: { account_id, balance, ... }
           const obj = accountsData.data as Record<string, any>;
-          accountsArray = Object.entries(obj).map(([type, acc]) => ({
-            ...(acc as DerivAccount),
-            account_type: type
-          } as DerivAccount));
+          const keys = Object.keys(obj);
+
+          // Check if it looks like a single account (has account_id directly)
+          if (obj.account_id) {
+            accountsArray = [obj as DerivAccount];
+          } else {
+            // It's a dict of accounts keyed by type or account_id
+            accountsArray = keys.map((key) => {
+              const acc = obj[key] as DerivAccount;
+              return {
+                ...acc,
+                account_type: acc.account_type || key,
+              } as DerivAccount;
+            });
+          }
         }
+
         if (accountsArray.length > 0) {
           accounts = accountsArray.map((acc: DerivAccount) => ({
             accountId: acc.account_id,
@@ -61,13 +81,14 @@ export async function GET(request: NextRequest) {
             currency: acc.currency || "USD",
             type: acc.account_type || "unknown",
           }));
+          console.log("[Auth/me] Parsed accounts:", accounts.map(a => a.accountId + "(" + a.type + ")").join(", "));
         }
       }
     } else {
-      console.error("[Auth/me] Deriv accounts API returned:", accountsRes.status);
+      console.error("[Auth/me] Deriv API error:", accountsRes.status);
     }
   } catch (err) {
-    console.error("[Auth/me] Failed to fetch accounts:", err);
+    console.error("[Auth/me] Deriv API fetch failed:", err);
   }
 
   // Step 2: Fallback to stored accounts cookie (all accounts from login)
@@ -83,8 +104,11 @@ export async function GET(request: NextRequest) {
             currency: acc.currency || "USD",
             type: acc.account_type || "unknown",
           }));
+          console.log("[Auth/me] Fallback from cookie:", accounts.map(a => a.accountId + "(" + a.type + ")").join(", "));
         }
-      } catch {}
+      } catch (e) {
+        console.error("[Auth/me] Failed to parse deriv_accounts cookie:", e);
+      }
     }
   }
 
@@ -94,22 +118,22 @@ export async function GET(request: NextRequest) {
     const cookieBalance = readCookie(request, "deriv_balance");
     const cookieType = readCookie(request, "deriv_account_type");
     if (cookieAccountId) {
-      accounts = [{ 
-        accountId: cookieAccountId, 
-        balance: cookieBalance || "0.00", 
-        currency: "USD", 
-        type: cookieType || "unknown" 
+      accounts = [{
+        accountId: cookieAccountId,
+        balance: cookieBalance || "0.00",
+        currency: "USD",
+        type: cookieType || "unknown"
       }];
     }
   }
 
-  // Step 4: Ultimate fallback - return demo account so UI works
+  // Step 4: Ultimate fallback
   if (accounts.length === 0) {
-    accounts = [{ 
-      accountId: "DEMO_ACCOUNT", 
-      balance: "10000.00", 
-      currency: "USD", 
-      type: "demo" 
+    accounts = [{
+      accountId: "DEMO_ACCOUNT",
+      balance: "10000.00",
+      currency: "USD",
+      type: "demo"
     }];
   }
 

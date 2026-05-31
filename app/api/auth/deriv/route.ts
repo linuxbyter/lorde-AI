@@ -11,9 +11,11 @@ function base64url(buffer: Buffer) {
 }
 
 function generateCodeVerifier(): string {
-  const array = crypto.randomBytes(32);
+  // RFC 7636 requires 43-128 chars from [A-Z a-z 0-9 - . _ ~]
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const array = crypto.randomBytes(64);
   return Array.from(array)
-    .map(v => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'[v % 66])
+    .map(v => chars[v % chars.length])
     .join('');
 }
 
@@ -40,18 +42,9 @@ export async function GET() {
   const challengeHash = crypto.createHash("sha256").update(codeVerifier).digest();
   const codeChallenge = base64url(challengeHash);
 
-  // Encode verifier inside state so it survives cross-site redirects (mobile fix)
+  // Encode verifier inside state so it survives cross-site redirects
   const stateRandom = base64url(crypto.randomBytes(16));
   const state = base64url(Buffer.from(stateRandom + ":" + codeVerifier));
-
-  const cookieStore = await cookies();
-  cookieStore.set("oauth_state", state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 600,
-    path: "/",
-  });
 
   const redirectUri = `${baseUrl}/api/auth/callback`;
 
@@ -65,7 +58,18 @@ export async function GET() {
     code_challenge_method: "S256",
   });
 
-  return NextResponse.redirect(
+  // Create redirect response first, then set cookies on it
+  const response = NextResponse.redirect(
     `https://auth.deriv.com/oauth2/auth?${params.toString()}`
   );
+
+  response.cookies.set("oauth_state", state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
+  });
+
+  return response;
 }

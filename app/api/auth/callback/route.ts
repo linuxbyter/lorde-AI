@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 
 function base64urlDecode(str: string): string {
   const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  return Buffer.from(base64, "base64").toString("utf-8");
+  // Add padding if needed
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return Buffer.from(padded, "base64").toString("utf-8");
 }
 
 export async function GET(request: NextRequest) {
@@ -35,17 +37,26 @@ export async function GET(request: NextRequest) {
     if (colonIdx > 0) {
       codeVerifier = decoded.slice(colonIdx + 1);
     }
-  } catch {}
+  } catch (e) {
+    console.error("[Auth Callback] Failed to decode state:", e);
+  }
 
-  if (!state || state !== storedState) {
-    console.error("[Auth Callback] State mismatch");
+  if (!state || !storedState) {
+    console.error("[Auth Callback] Missing state or stored state", { state: !!state, storedState: !!storedState });
+    return NextResponse.redirect(
+      new URL("/dashboard?auth=failed&reason=missing_state", baseUrl)
+    );
+  }
+
+  if (state !== storedState) {
+    console.error("[Auth Callback] State mismatch", { received: state?.substring(0, 20), stored: storedState?.substring(0, 20) });
     return NextResponse.redirect(
       new URL("/dashboard?auth=failed&reason=state_mismatch", baseUrl)
     );
   }
 
   if (!code || !codeVerifier) {
-    console.error("[Auth Callback] Missing code or verifier");
+    console.error("[Auth Callback] Missing code or verifier", { code: !!code, verifier: !!codeVerifier });
     return NextResponse.redirect(
       new URL("/dashboard?auth=failed&reason=missing_code", baseUrl)
     );
@@ -69,6 +80,7 @@ export async function GET(request: NextRequest) {
     });
 
     tokenData = await tokenRes.json();
+    console.log("[Auth Callback] Token response:", JSON.stringify(tokenData).substring(0, 200));
 
     if (!tokenData.access_token) {
       console.error("[Auth Callback] No access_token:", tokenData);
@@ -83,7 +95,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Step 2: Fetch account info
+  // Step 2: Fetch all accounts (demo + real)
   let accountId = "";
   let balance = "0.00";
   let accountType = "unknown";
@@ -100,21 +112,36 @@ export async function GET(request: NextRequest) {
       }
     );
     const accountsData = await accountsRes.json();
-    console.log("[Auth Callback] Accounts:", JSON.stringify(accountsData).substring(0, 300));
+    console.log("[Auth Callback] Accounts response:", JSON.stringify(accountsData).substring(0, 500));
 
-    if (accountsData.data && accountsData.data.length > 0) {
-      accountId = accountsData.data[0].account_id;
-      balance = String(accountsData.data[0].balance || "0.00");
-      accountType = accountsData.data[0].account_type || "unknown";
-      rawAccounts = JSON.stringify(accountsData.data);
+    if (accountsData.data) {
+      let accountsArray = [];
+      if (Array.isArray(accountsData.data)) {
+        accountsArray = accountsData.data;
+      } else if (typeof accountsData.data === "object") {
+        // Object format like { demo: {...}, real: {...} }
+        accountsArray = Object.entries(accountsData.data).map(([type, acc]: [string, any]) => ({
+          ...acc,
+          account_type: acc.account_type || type,
+        }));
+      }
+
+      if (accountsArray.length > 0) {
+        rawAccounts = JSON.stringify(accountsArray);
+        // Pick first account as default
+        accountId = accountsArray[0].account_id;
+        balance = String(accountsArray[0].balance || "0.00");
+        accountType = accountsArray[0].account_type || "unknown";
+        console.log("[Auth Callback] Found", accountsArray.length, "accounts:", accountsArray.map((a: any) => a.account_id + "(" + a.account_type + ")").join(", "));
+      }
     }
   } catch (err) {
     console.error("[Auth Callback] Account fetch failed:", err);
   }
 
-  console.log("[Auth Callback] Account:", accountId, "Balance:", balance, "Type:", accountType);
+  console.log("[Auth Callback] Default account:", accountId, "Balance:", balance, "Type:", accountType);
 
-  // Step 3: Set session cookies
+  // Step 3: Set session cookies ON the response object
   const expiresAt = Date.now() + (tokenData.expires_in || 3600) * 1000;
   const response = NextResponse.redirect(new URL("/dashboard", baseUrl));
 
@@ -142,8 +169,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Clear PKCE cookies
-  cookieStore.set("pkce_verifier", "", { maxAge: 0, path: "/" });
-  cookieStore.set("oauth_state", "", { maxAge: 0, path: "/" });
+  response.cookies.set("oauth_state", "", { maxAge: 0, path: "/" });
 
   return response;
 }
