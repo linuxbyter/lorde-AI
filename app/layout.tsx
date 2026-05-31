@@ -9,9 +9,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Lorde Core Bot Terminal",
+  title: "Lorde AI",
   description:
-    "High-performance web terminal for automated Deriv trading bots",
+    "Automated Deriv trading bot terminal powered by AI",
 };
 
 export default function RootLayout({

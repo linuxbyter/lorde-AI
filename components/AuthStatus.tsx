@@ -30,9 +30,9 @@ export default function AuthStatus() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
         <span className="w-2 h-2 rounded-full bg-terminal-muted animate-pulse" />
-        <span className="text-[10px] sm:text-xs text-terminal-muted">Checking...</span>
+        <span className="text-[10px] text-terminal-muted">...</span>
       </div>
     );
   }
@@ -42,10 +42,9 @@ export default function AuthStatus() {
       <a
         href="#"
         onClick={handleConnect}
-        className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border hover:border-terminal-glow/50 transition-colors text-[10px] sm:text-xs"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-terminal-surface border border-terminal-border hover:border-terminal-glow/50 transition-colors text-[10px]"
       >
         <span className="w-2 h-2 rounded-full bg-terminal-danger" />
-        <span className="text-terminal-muted hidden sm:inline">Not Connected</span>
         <span className="text-terminal-glow font-medium">Connect</span>
       </a>
     );
@@ -53,9 +52,9 @@ export default function AuthStatus() {
 
   if (!auth.selectedAccount) {
     return (
-      <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
         <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow shrink-0" />
-        <span className="text-[10px] sm:text-xs font-mono text-terminal-glow">Loading...</span>
+        <span className="text-[10px] font-mono text-terminal-glow">...</span>
       </div>
     );
   }
@@ -66,65 +65,66 @@ export default function AuthStatus() {
 
   return (
     <>
-      <div className="flex items-center gap-1.5 sm:gap-3 px-2 sm:px-3 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
+      <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-terminal-surface border border-terminal-border">
         <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow shrink-0" />
         <div className="flex flex-col min-w-0">
-          <span className="text-[10px] sm:text-xs font-mono text-terminal-glow truncate">
+          <span className="text-[10px] font-mono text-terminal-glow truncate max-w-[80px] sm:max-w-none">
             {selected.accountId}
           </span>
           <div className="flex items-center gap-1">
-            <span className={`text-[9px] sm:text-[10px] ${typeColor}`}>
-              ${(parseFloat(selected.balance) || 0).toFixed(2)} {selected.currency}
+            <span className={`text-[9px] ${typeColor}`}>
+              ${(parseFloat(selected.balance) || 0).toFixed(2)}
             </span>
-            <span className="text-[8px] sm:text-[10px] text-terminal-muted px-1 sm:px-2 py-0.5 rounded bg-terminal-surface/20">
+            <span className="text-[8px] text-terminal-muted px-1 py-0.5 rounded bg-terminal-surface/20">
               {typeLabel}
             </span>
           </div>
         </div>
         <button
           onClick={() => setShowAccountModal(true)}
-          className="text-[9px] sm:text-[10px] text-terminal-muted hover:text-terminal-glow transition-colors shrink-0"
+          className="text-terminal-muted hover:text-terminal-glow transition-colors shrink-0 p-1"
+          aria-label="Switch account"
         >
-          <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
           </svg>
         </button>
         <button
           onClick={logout}
-          className="text-[9px] sm:text-[10px] text-terminal-muted hover:text-terminal-danger transition-colors shrink-0"
+          className="text-terminal-muted hover:text-terminal-danger transition-colors shrink-0 p-1"
+          aria-label="Disconnect"
         >
-          <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
         </button>
       </div>
 
-      {/* Account Selector Modal — rendered as portal-like with document.body */}
       {showAccountModal &&
         createPortal(
           <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in sm:p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) setShowAccountModal(false);
             }}
           >
-            <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-[calc(100%-2rem)] animate-slide-up shadow-2xl">
+            <div className="bg-terminal-surface border border-terminal-border rounded-t-xl sm:rounded-xl p-4 sm:p-6 max-w-sm w-full animate-slide-up shadow-2xl sm:mx-0 mx-4 mb-0 sm:mb-0">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-xs sm:text-sm">Select Trading Account</h3>
+                <h3 className="font-semibold text-sm">Select Trading Account</h3>
                 <button
                   onClick={() => setShowAccountModal(false)}
-                  className="text-terminal-muted hover:text-terminal-danger transition-colors"
+                  className="text-terminal-muted hover:text-terminal-danger transition-colors p-1"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {auth.accounts.map((acc) => (
                   <div
                     key={acc.accountId}
-                    className={`flex items-center gap-3 py-2.5 px-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={`flex items-center gap-3 py-3 px-3 rounded-lg border cursor-pointer transition-colors ${
                       acc.accountId === selected.accountId
                         ? "border-terminal-glow bg-terminal-glow/10"
                         : "border-terminal-border hover:bg-terminal-surface/80"
@@ -139,12 +139,12 @@ export default function AuthStatus() {
                       }`}
                     />
                     <div className="flex flex-col min-w-0">
-                      <span className="text-[10px] sm:text-xs font-mono text-terminal-glow truncate">
+                      <span className="text-xs font-mono text-terminal-glow truncate">
                         {acc.accountId}
                       </span>
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`text-[9px] sm:text-[10px] ${
+                          className={`text-[10px] ${
                             acc.type === "demo"
                               ? "text-terminal-glow"
                               : acc.type === "real"
@@ -154,7 +154,7 @@ export default function AuthStatus() {
                         >
                           ${(parseFloat(acc.balance) || 0).toFixed(2)} {acc.currency}
                         </span>
-                        <span className="text-[8px] sm:text-[10px] text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-surface/20 uppercase">
+                        <span className="text-[9px] text-terminal-muted px-1.5 py-0.5 rounded bg-terminal-surface/20 uppercase">
                           {acc.type}
                         </span>
                       </div>
@@ -165,7 +165,7 @@ export default function AuthStatus() {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setShowAccountModal(false)}
-                  className="px-4 py-2 rounded-md border border-terminal-border text-xs sm:text-sm text-terminal-muted hover:bg-terminal-surface/80 transition-colors"
+                  className="px-4 py-2 rounded-md border border-terminal-border text-sm text-terminal-muted hover:bg-terminal-surface/80 transition-colors"
                 >
                   Cancel
                 </button>
@@ -177,4 +177,3 @@ export default function AuthStatus() {
     </>
   );
 }
-

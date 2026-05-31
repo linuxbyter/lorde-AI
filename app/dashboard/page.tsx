@@ -9,43 +9,31 @@ import LoadBotButton from "@/components/LoadBotButton";
 import RunBotButton from "@/components/RunBotButton";
 import ConsoleLog from "@/components/ConsoleLog";
 
-// Mobile auth recovery helper
 function recoverMobileAuth() {
   if (typeof window === "undefined") return;
-  
-  // Try to recover from localStorage if cookies failed
   const savedAuth = localStorage.getItem("lorde_auth_state");
   if (savedAuth) {
     try {
       const parsed = JSON.parse(savedAuth);
       if (parsed.token && parsed.accountId) {
-        // Set cookies to recover auth state
         document.cookie = `deriv_token=${parsed.token}; path=/; max-age=3600; secure; samesite=lax`;
         document.cookie = `deriv_account=${parsed.accountId}; path=/; max-age=3600; secure; samesite=lax`;
         document.cookie = `deriv_balance=${parsed.balance || "0.00"}; path=/; max-age=3600; secure; samesite=lax`;
         document.cookie = `deriv_account_type=${parsed.accountType || "demo"}; path=/; max-age=3600; secure; samesite=lax`;
         document.cookie = `deriv_authenticated=true; path=/; max-age=3600; secure; samesite=lax`;
-        
-        // Clear the recovery flag
         localStorage.removeItem("lorde_auth_state");
       }
-    } catch (e) {
-      console.warn("Failed to recover mobile auth:", e);
-    }
+    } catch {}
   }
 }
 
-// Save auth state to localStorage for mobile recovery
 function saveAuthState() {
   if (typeof window === "undefined") return;
-  
-  // Read cookies to save state (for mobile recovery)
   const cookies = document.cookie.split("; ").reduce((acc, curr) => {
     const [name, value] = curr.split("=");
     acc[name] = value;
     return acc;
   }, {} as Record<string, string>);
-  
   if (cookies.deriv_token && cookies.deriv_account) {
     localStorage.setItem("lorde_auth_state", JSON.stringify({
       token: cookies.deriv_token,
@@ -58,10 +46,10 @@ function saveAuthState() {
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg border border-terminal-border bg-terminal-surface/50">
-      <div className="text-[9px] sm:text-[10px] text-terminal-muted uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-lg sm:text-xl font-bold font-mono ${color || "text-terminal-text"}`}>{value}</div>
-      {sub && <div className="text-[9px] sm:text-[10px] text-terminal-muted mt-0.5">{sub}</div>}
+    <div className="px-3 py-2.5 rounded-lg border border-terminal-border bg-terminal-surface/50 min-w-0">
+      <div className="text-[9px] text-terminal-muted uppercase tracking-wider mb-0.5 truncate">{label}</div>
+      <div className={`text-base sm:text-xl font-bold font-mono truncate ${color || "text-terminal-text"}`}>{value}</div>
+      {sub && <div className="text-[9px] text-terminal-muted mt-0.5 truncate">{sub}</div>}
     </div>
   );
 }
@@ -72,35 +60,29 @@ function DashboardInner() {
   const [showConsole, setShowConsole] = useState(false);
 
   useEffect(() => {
-    // Try to recover mobile auth state from localStorage
     recoverMobileAuth();
-    
-    // Save current auth state to localStorage for recovery on next load
     saveAuthState();
-    
-    addLog("info", "Lorde Core Bot Terminal initialized");
+    addLog("info", "Lorde AI Trading Terminal initialized");
   }, [addLog]);
 
   return (
-    <div className="min-h-screen sm:h-screen flex flex-col bg-terminal-bg overflow-hidden">
+    <div className="h-dvh flex flex-col bg-terminal-bg overflow-hidden">
       {/* Header */}
-      <header className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 border-b border-terminal-border bg-terminal-surface/80 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-terminal-glow animate-pulse-glow" />
-            <span className="font-bold text-xs sm:text-sm tracking-tight">
-              <span className="text-terminal-text">LORDE</span>{" "}
-              <span className="text-terminal-glow">CORE</span>
-            </span>
-          </div>
+      <header className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-terminal-border bg-terminal-surface/80 backdrop-blur-sm z-10">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow" />
+          <span className="font-bold text-xs tracking-tight">
+            <span className="text-terminal-text">LORDE</span>{" "}
+            <span className="text-terminal-glow">AI</span>
+          </span>
         </div>
         <AuthStatus />
       </header>
 
       {/* Main workspace */}
-      <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 gap-3 sm:gap-4 overflow-y-auto">
-        {/* Stats row */}
-        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3">
+      <div className="flex-1 flex flex-col min-h-0 p-3 gap-3 overflow-y-auto overscroll-contain">
+        {/* Stats row - 2 cols on mobile, 5 on sm+ */}
+        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-5 gap-2">
           <StatCard
             label="Balance"
             value={`$${(parseFloat(auth.selectedAccount?.balance || "0") || 0).toFixed(2)}`}
@@ -130,22 +112,22 @@ function DashboardInner() {
           />
         </div>
 
-        {/* Controls row */}
-        <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 sm:gap-3">
-             <BotSelector />
-             <LoadBotButton />
-             <RunBotButton />
-           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+        {/* Bot controls - stacked on mobile */}
+        <div className="shrink-0 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <BotSelector />
+            <LoadBotButton />
+          </div>
+          <div className="flex items-center gap-2">
+            <RunBotButton />
             {bot && (
-              <span className="text-[9px] sm:text-[10px] text-terminal-muted font-mono">
+              <span className="text-[10px] text-terminal-muted font-mono truncate min-w-0">
                 {bot.name}
               </span>
             )}
             <button
               onClick={() => setShowConsole(!showConsole)}
-              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-md border text-[10px] sm:text-xs transition-colors ${
+              className={`ml-auto flex items-center gap-1.5 px-3 py-2 rounded-md border text-xs transition-colors shrink-0 ${
                 showConsole
                   ? "border-terminal-glow/30 text-terminal-glow bg-terminal-glow/5"
                   : "border-terminal-border text-terminal-muted hover:border-terminal-glow/30"
@@ -154,14 +136,14 @@ function DashboardInner() {
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={showConsole ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
               </svg>
-              {showConsole ? "Hide Logs" : "Show Logs"}
+              Logs
             </button>
           </div>
         </div>
 
         {/* Console — collapsible */}
         {showConsole && (
-          <div className="flex-1 min-h-[200px] sm:min-h-0 rounded-lg border border-terminal-border bg-terminal-surface/30 overflow-hidden animate-slide-up">
+          <div className="sm:flex-1 h-[50vh] sm:h-auto sm:min-h-[180px] rounded-lg border border-terminal-border bg-terminal-surface/30 overflow-hidden animate-slide-up">
             <ConsoleLog />
           </div>
         )}

@@ -23,7 +23,6 @@ export default function RunBotButton() {
     }
 
     if (isRunning) {
-      // Stop — abort the SSE connection
       if (abortRef.current) {
         abortRef.current.abort();
         abortRef.current = null;
@@ -33,7 +32,6 @@ export default function RunBotButton() {
       return;
     }
 
-    // Increment session to invalidate any stale finally blocks
     const mySession = ++sessionRef.current;
 
     addLog("info", `Connecting to Deriv account ${auth.selectedAccount?.accountId ?? ""}...`);
@@ -54,7 +52,6 @@ export default function RunBotButton() {
         signal: abortController.signal,
       });
 
-      // Check if this session is still current
       if (mySession !== sessionRef.current) return;
 
       if (!res.ok) {
@@ -70,7 +67,6 @@ export default function RunBotButton() {
         return;
       }
 
-      // Read SSE stream
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -95,7 +91,6 @@ export default function RunBotButton() {
                               data.type === "success" ? "success" :
                               "info";
 
-              // Parse trade results from bot logs to update stats
               const msg = data.message || "";
               if (msg.includes("WIN") || msg.includes("won")) {
                 const pnlMatch = msg.match(/P&L: \$([-\d.]+)/);
@@ -129,7 +124,6 @@ export default function RunBotButton() {
         addLog("error", `Connection error: ${err.message}`);
       }
     } finally {
-      // Only stop bot if this is still the current session
       if (mySession === sessionRef.current) {
         stopBot();
       }
@@ -145,10 +139,10 @@ export default function RunBotButton() {
         onClick={handleRun}
         disabled={!bot && !isRunning}
         className={`
-          relative px-4 sm:px-6 py-1.5 sm:py-2.5 rounded-md font-semibold text-xs sm:text-sm transition-all duration-200
+          flex-1 sm:flex-none relative px-4 sm:px-6 py-2.5 rounded-md font-semibold text-sm transition-all duration-200
           ${
             isRunning
-              ? "bg-terminal-danger/20 border border-terminal-danger/50 text-terminal-danger hover:bg-terminal-danger/30"
+              ? "bg-terminal-danger/20 border border-terminal-danger/50 text-terminal-danger hover:bg-terminal-danger/30 animate-pulse-glow"
               : bot
               ? "bg-terminal-glow text-terminal-bg hover:bg-terminal-glow/90 hover:shadow-glow active:scale-[0.98]"
               : "bg-terminal-surface border border-terminal-border text-terminal-muted cursor-not-allowed opacity-50"
@@ -156,13 +150,13 @@ export default function RunBotButton() {
         `}
       >
         {isRunning ? (
-          <span className="flex items-center gap-1.5 sm:gap-2">
-            <span className="w-2 h-2 rounded-full bg-terminal-danger animate-pulse" />
+          <span className="flex items-center justify-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-terminal-danger animate-pulse" />
             Stop Bot
           </span>
         ) : (
-          <span className="flex items-center gap-1.5 sm:gap-2">
-            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 24 24">
+          <span className="flex items-center justify-center gap-2">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
             Run Bot
@@ -174,35 +168,33 @@ export default function RunBotButton() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in p-4">
           <div className="bg-terminal-surface border border-terminal-border rounded-xl p-4 sm:p-6 max-w-sm w-full mx-auto animate-slide-up shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-terminal-danger/20 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-terminal-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="w-10 h-10 rounded-full bg-terminal-danger/20 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-terminal-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
               </div>
               <div>
-                <h3 className="font-semibold text-xs sm:text-sm">Authentication Required</h3>
-                <p className="text-[10px] sm:text-xs text-terminal-muted">
-                  You haven&apos;t signed in via Deriv
-                </p>
+                <h3 className="font-semibold text-sm">Authentication Required</h3>
+                <p className="text-xs text-terminal-muted">Sign in via Deriv to continue</p>
               </div>
             </div>
-            <p className="text-xs sm:text-sm text-terminal-muted mb-6 leading-relaxed">
-              Please log in to connect your account to authorize bot operations.
+            <p className="text-sm text-terminal-muted mb-6 leading-relaxed">
+              Connect your Deriv account to authorize bot trading operations.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowAuthModal(false)}
-                className="flex-1 px-4 py-2 rounded-md border border-terminal-border text-xs sm:text-sm text-terminal-muted 
+                className="flex-1 px-4 py-2.5 rounded-md border border-terminal-border text-sm text-terminal-muted 
                   hover:bg-terminal-surface/80 transition-colors"
               >
                 Cancel
               </button>
               <a
                 href="/api/auth/deriv"
-                className="flex-1 px-4 py-2 rounded-md bg-terminal-glow text-terminal-bg text-xs sm:text-sm font-semibold 
+                className="flex-1 px-4 py-2.5 rounded-md bg-terminal-glow text-terminal-bg text-sm font-semibold 
                   text-center hover:bg-terminal-glow/90 transition-colors hover:shadow-glow"
               >
-                Connect Deriv Account
+                Connect Deriv
               </a>
             </div>
           </div>

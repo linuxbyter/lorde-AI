@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     type: string;
   }> = [];
 
-  // Step 1: Try live Deriv API
+  // Step 1: Try live Deriv API to get fresh account data
   try {
     const accountsRes = await fetch(
       "https://api.derivws.com/trading/v1/options/accounts",
@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
         if (Array.isArray(accountsData.data)) {
           accountsArray = accountsData.data as DerivAccount[];
         } else if (typeof accountsData.data === 'object' && accountsData.data !== null) {
-          // Handle object format like { demo: {...}, real: {...} }
           const obj = accountsData.data as Record<string, any>;
           accountsArray = Object.entries(obj).map(([type, acc]) => ({
             ...(acc as DerivAccount),
@@ -64,12 +63,32 @@ export async function GET(request: NextRequest) {
           }));
         }
       }
+    } else {
+      console.error("[Auth/me] Deriv accounts API returned:", accountsRes.status);
     }
   } catch (err) {
-    console.error("[Auth/me] Deriv API error:", err);
+    console.error("[Auth/me] Failed to fetch accounts:", err);
   }
 
-  // Step 2: Fallback to cookies if API failed
+  // Step 2: Fallback to stored accounts cookie (all accounts from login)
+  if (accounts.length === 0) {
+    const rawAccounts = readCookie(request, "deriv_accounts");
+    if (rawAccounts) {
+      try {
+        const parsed = JSON.parse(rawAccounts);
+        if (Array.isArray(parsed)) {
+          accounts = parsed.map((acc: any) => ({
+            accountId: acc.account_id,
+            balance: String(acc.balance || "0.00"),
+            currency: acc.currency || "USD",
+            type: acc.account_type || "unknown",
+          }));
+        }
+      } catch {}
+    }
+  }
+
+  // Step 3: Fallback to single account cookie
   if (accounts.length === 0) {
     const cookieAccountId = readCookie(request, "deriv_account");
     const cookieBalance = readCookie(request, "deriv_balance");
@@ -84,7 +103,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Step 3: Ultimate fallback - return demo account so UI works
+  // Step 4: Ultimate fallback - return demo account so UI works
   if (accounts.length === 0) {
     accounts = [{ 
       accountId: "DEMO_ACCOUNT", 

@@ -10,12 +10,12 @@ export default function LandingPage() {
   useEffect(() => setMounted(true), []);
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+    <div className="relative min-h-dvh flex flex-col items-center justify-center overflow-hidden px-4">
       {/* Background grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.03)_1px,transparent_1px)] bg-[size:40px_40px]" />
+      <div className="absolute inset-0 grid-bg" />
 
       {/* Radial glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-terminal-glow/5 rounded-full blur-[120px]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] sm:w-[600px] h-[400px] sm:h-[600px] bg-terminal-glow/5 rounded-full blur-[100px] sm:blur-[120px]" />
 
       {/* Content */}
       <div
@@ -23,38 +23,37 @@ export default function LandingPage() {
           mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
         }`}
       >
-        {/* Logo / Brand */}
-        <div className="mb-8">
-          <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-terminal-border bg-terminal-surface/50 mb-6">
-            <span className="w-2 h-2 rounded-full bg-terminal-glow animate-pulse-glow" />
-            <span className="text-xs text-terminal-muted tracking-widest uppercase">
-              System Online
-            </span>
-          </div>
-
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-4">
-            <span className="text-terminal-text">Lorde</span>{" "}
-            <span className="text-terminal-glow glow-text">Core</span>
-          </h1>
-          <h2 className="text-xl md:text-2xl text-terminal-muted font-light tracking-wide">
-            Bot Terminal
-          </h2>
+        {/* Status badge */}
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-terminal-border bg-terminal-surface/50 mb-6 sm:mb-8">
+          <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow animate-pulse-glow" />
+          <span className="text-[10px] sm:text-xs text-terminal-muted tracking-widest uppercase">
+            System Online
+          </span>
         </div>
 
+        {/* Title */}
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 sm:mb-4">
+          <span className="text-terminal-text">Lorde</span>{" "}
+          <span className="text-terminal-glow glow-text">AI</span>
+        </h1>
+        <h2 className="text-base sm:text-xl md:text-2xl text-terminal-muted font-light tracking-wide mb-6 sm:mb-8">
+          Trading Terminal
+        </h2>
+
         {/* Tagline */}
-        <p className="text-terminal-muted text-sm md:text-base max-w-md mx-auto mb-12 leading-relaxed">
+        <p className="text-terminal-muted text-xs sm:text-sm md:text-base max-w-sm sm:max-w-md mx-auto mb-8 sm:mb-12 leading-relaxed">
           Deploy automated trading bots on Deriv. Connect your account, load
-          your strategy, and execute in a single cockpit interface.
+          your strategy, and execute — all from one terminal.
         </p>
 
         {/* CTA */}
         <button
           onClick={() => router.push("/dashboard")}
-          className="group relative px-8 py-3.5 bg-terminal-glow text-terminal-bg font-semibold rounded-lg 
+          className="group relative px-6 sm:px-8 py-3 sm:py-3.5 bg-terminal-glow text-terminal-bg font-semibold rounded-lg 
             hover:bg-terminal-glow/90 transition-all duration-300 hover:shadow-glow-lg
-            active:scale-[0.98]"
+            active:scale-[0.98] text-sm sm:text-base"
         >
-          <span className="relative z-10 flex items-center gap-2">
+          <span className="relative z-10 flex items-center justify-center gap-2">
             Launch Terminal
             <svg
               className="w-4 h-4 group-hover:translate-x-1 transition-transform"
@@ -72,19 +71,19 @@ export default function LandingPage() {
           </span>
         </button>
 
-        {/* Footer info */}
-        <div className="mt-12 sm:mt-16 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-[10px] sm:text-xs text-terminal-muted">
-          <span className="flex items-center gap-1.5 sm:gap-2">
+        {/* Feature badges */}
+        <div className="mt-8 sm:mt-12 flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-[10px] sm:text-xs text-terminal-muted">
+          <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow" />
             Deriv OAuth
           </span>
           <span className="w-px h-3 bg-terminal-border hidden sm:block" />
-          <span className="flex items-center gap-1.5 sm:gap-2">
+          <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-terminal-accent" />
             Bot Engine
           </span>
           <span className="w-px h-3 bg-terminal-border hidden sm:block" />
-          <span className="flex items-center gap-1.5 sm:gap-2">
+          <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-terminal-glow" />
             Real-time Logs
           </span>

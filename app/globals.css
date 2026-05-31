@@ -23,25 +23,33 @@ body {
   color: #e2e8f0;
   font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Better mobile touch targets */
+@media (max-width: 640px) {
+  button, a, [role="button"] {
+    min-height: 36px;
+  }
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--terminal-bg);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--terminal-border);
-  border-radius: 3px;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--glow-green);
 }
 
-/* Glow effect for active elements */
+/* Glow effects */
 .glow-border {
   border: 1px solid rgba(16, 185, 129, 0.3);
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.1),
@@ -54,16 +62,37 @@ body {
 
 /* Console log entry animation */
 .log-entry {
-  animation: fade-in 0.2s ease-out;
+  animation: fade-in 0.15s ease-out;
+}
+
+/* Safe area for notched phones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Subtle scan line effect */
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Grid background pattern */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(16,185,129,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16,185,129,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
 }

@@ -15,7 +15,6 @@ export async function POST(request: NextRequest) {
 
   const { accountId, botCode, botName } = body;
 
-  // Read token from httpOnly cookie (not from request body)
   const token = request.cookies.get("deriv_token")?.value;
 
   if (!token || !accountId) {
@@ -33,15 +32,13 @@ export async function POST(request: NextRequest) {
   }
 
   const encoder = new TextEncoder();
-  const BOT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max
+  const BOT_TIMEOUT_MS = 10 * 60 * 1000;
 
   const stream = new ReadableStream({
     start(controller) {
       let closed = false;
       let pingInterval: ReturnType<typeof setInterval> | null = null;
-      let statsInterval: ReturnType<typeof setInterval> | null = null;
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      let activeWs: any = null;
 
       const sendEvent = (data: Record<string, unknown>) => {
         if (closed) return;
@@ -54,21 +51,15 @@ export async function POST(request: NextRequest) {
         if (closed) return;
         closed = true;
         if (pingInterval) clearInterval(pingInterval);
-        if (statsInterval) clearInterval(statsInterval);
         if (timeoutId) clearTimeout(timeoutId);
-        if (activeWs && typeof activeWs.close === "function") {
-          try { activeWs.close(); } catch {}
-        }
         try { controller.close(); } catch {}
       };
 
-      // Timeout safety net
       timeoutId = setTimeout(() => {
         sendEvent({ type: "warn", message: `Bot timed out after ${BOT_TIMEOUT_MS / 1000}s` });
         cleanup();
       }, BOT_TIMEOUT_MS);
 
-      // Set up sandbox context
       const moduleObj = { exports: {} as any };
 
       const sandbox: Record<string, any> = {
@@ -79,7 +70,6 @@ export async function POST(request: NextRequest) {
           error: (...args: any[]) => sendEvent({ type: "error", message: args.join(" ") }),
           warn: (...args: any[]) => sendEvent({ type: "warn", message: args.join(" ") }),
         },
-        // Network — restricted to Deriv only
         fetch: async (url: string | Request, init?: RequestInit) => {
           const urlStr = typeof url === "string" ? url : url.toString();
           if (!urlStr.includes("derivws.com") && !urlStr.includes("auth.deriv.com")) {
@@ -88,15 +78,12 @@ export async function POST(request: NextRequest) {
           return globalThis.fetch(url, init);
         },
         WebSocket: WsModule,
-        // Timer APIs
         setInterval: (fn: Function, ms: number) => {
-          const id = setInterval(() => { try { fn(); } catch {} }, ms);
-          return id;
+          return setInterval(() => { try { fn(); } catch {} }, ms);
         },
         setTimeout: (fn: Function, ms: number) => setTimeout(fn, ms),
         clearTimeout: clearTimeout,
         clearInterval: clearInterval,
-        // Core JS globals
         Date: Date,
         Math: Math,
         JSON: JSON,
@@ -132,7 +119,6 @@ export async function POST(request: NextRequest) {
         decodeURI: decodeURI,
         Buffer: Buffer,
         globalThis: {},
-        // Module system
         require: (mod: string) => {
           if (mod === "ws") return WsModule;
           throw new Error(`Module "${mod}" is not available in sandbox`);
@@ -146,12 +132,10 @@ export async function POST(request: NextRequest) {
         arguments: [],
       };
 
-      // Make globalThis reference itself
       sandbox.globalThis = sandbox;
 
       const context = vm.createContext(sandbox);
 
-      // Run bot code to define the function
       try {
         const script = new vm.Script(botCode, { filename: `${botName || "bot"}.js` });
         script.runInContext(context);
@@ -168,25 +152,23 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      sendEvent({ type: "info", message: `Bot "${botName}" started on account ${accountId}` });
+      const appId = process.env.NEXT_PUBLIC_DERIV_APP_ID || "33owq0MRuV9ahlgyDTUS7";
+      sendEvent({ type: "info", message: `Bot "${botName}" starting on account ${accountId}...` });
 
-      // Execute the bot
-      runBot(token, accountId, process.env.NEXT_PUBLIC_DERIV_APP_ID || "33owq0MRuV9ahlgyDTUS7")
+      runBot(token, accountId, appId)
         .then(() => {
           sendEvent({ type: "info", message: "Bot finished execution" });
           cleanup();
         })
         .catch((err: any) => {
-          sendEvent({ type: "error", message: `Bot runtime error: ${err.message || err}` });
+          sendEvent({ type: "error", message: `Bot runtime error: ${err.message || String(err)}` });
           cleanup();
         });
 
-      // Keep-alive ping every 30s
       pingInterval = setInterval(() => {
         sendEvent({ type: "ping" });
       }, 30000);
 
-      // Handle client disconnect
       request.signal.addEventListener("abort", () => {
         sendEvent({ type: "warn", message: "Client disconnected, stopping bot..." });
         cleanup();

@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
   response.cookies.set("deriv_account_type", accountType, cookieOpts);
   response.cookies.set("deriv_authenticated", "true", cookieOpts);
   response.cookies.set("deriv_expires_at", String(expiresAt), cookieOpts);
-  response.cookies.set("deriv_accounts", rawAccounts, { ...cookieOpts, maxAge: 600 });
+  response.cookies.set("deriv_accounts", rawAccounts, { ...cookieOpts, maxAge: 24 * 60 * 60 });
 
   if (tokenData.refresh_token) {
     response.cookies.set("deriv_refresh_token", tokenData.refresh_token, {
